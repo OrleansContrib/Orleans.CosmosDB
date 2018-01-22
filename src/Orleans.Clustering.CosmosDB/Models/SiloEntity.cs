@@ -1,0 +1,53 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using Orleans.Runtime;
+using System;
+using System.Collections.Generic;
+
+namespace Orleans.Clustering.CosmosDB.Models
+{
+    internal class SiloEntity : BaseEntity
+    {
+        public override string EntityType => nameof(SiloEntity);
+        
+        [JsonProperty(nameof(ClusterId))]
+        public string ClusterId { get; set; }
+
+        [JsonProperty(nameof(Address))]
+        public string Address { get; set; }
+
+        [JsonProperty(nameof(Port))]
+        public int Port { get; set; }
+
+        [JsonProperty(nameof(Generation))]
+        public int Generation { get; set; }
+
+        [JsonProperty(nameof(Hostname))]
+        public string Hostname { get; set; }
+
+        [JsonProperty(nameof(Status))]
+        [JsonConverter(typeof(StringEnumConverter))]
+        public SiloStatus Status { get; set; }
+
+        [JsonProperty(nameof(ProxyPort))]
+        public int? ProxyPort { get; set; }
+
+        [JsonProperty(nameof(SiloName))]
+        public string SiloName { get; set; }
+
+        [JsonProperty(nameof(SuspectingSilos))]
+        public List<string> SuspectingSilos { get; set; } = new List<string>();
+
+        [JsonProperty(nameof(SuspectingTimes))]
+        public List<string> SuspectingTimes { get; set; } = new List<string>();
+
+        [JsonProperty(nameof(StartTime))]
+        public DateTimeOffset StartTime { get; set; }
+
+        [JsonProperty(nameof(IAmAliveTime))]
+        public DateTimeOffset IAmAliveTime { get; set; }
+
+        [JsonProperty(nameof(Version))]
+        public Guid Version { get; set; }
+    }
+}
