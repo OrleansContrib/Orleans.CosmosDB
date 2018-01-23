@@ -9,9 +9,6 @@ namespace Orleans.Clustering.CosmosDB.Models
     internal class SiloEntity : BaseEntity
     {
         public override string EntityType => nameof(SiloEntity);
-        
-        [JsonProperty(nameof(ClusterId))]
-        public string ClusterId { get; set; }
 
         [JsonProperty(nameof(Address))]
         public string Address { get; set; }
@@ -46,8 +43,5 @@ namespace Orleans.Clustering.CosmosDB.Models
 
         [JsonProperty(nameof(IAmAliveTime))]
         public DateTimeOffset IAmAliveTime { get; set; }
-
-        [JsonProperty(nameof(Version))]
-        public Guid Version { get; set; }
     }
 }

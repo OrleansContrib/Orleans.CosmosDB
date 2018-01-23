@@ -11,9 +11,9 @@ namespace Orleans.CosmosDB.Tests
     /// <summary>
     /// Tests for operation of Orleans Membership Table using Azure Cosmos DB 
     /// </summary>
-    public class AzureCosmosDBMembershipTableTests : MembershipTableTestsBase/*, IClassFixture<AzureStorageBasicTests>*/
+    public class MBTTests : MembershipTableTestsBase/*, IClassFixture<AzureStorageBasicTests>*/
     {
-        public AzureCosmosDBMembershipTableTests() : base(CreateFilters())
+        public MBTTests() : base(CreateFilters())
         {
         }
 

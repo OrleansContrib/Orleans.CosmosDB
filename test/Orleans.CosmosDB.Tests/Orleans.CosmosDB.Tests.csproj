@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Orleans.Clustering.CosmosDB\Orleans.Clustering.CosmosDB.csproj" />
+    <ProjectReference Include="..\..\src\Orleans.Persistence.CosmosDB\Orleans.Persistence.CosmosDB.csproj" />
   </ItemGroup>
 
 </Project>

@@ -259,7 +259,7 @@ namespace Orleans.Clustering.CosmosDB
                     PartitionKey = new PartitionKey(PARTITION_KEY),
                     //TODO: Check the consistency level for the emulator
                     //ConsistencyLevel = ConsistencyLevel.Strong,
-                    OfferThroughput = this._options.CollectionThroughout
+                    OfferThroughput = this._options.CollectionThroughput
                 });
         }
 

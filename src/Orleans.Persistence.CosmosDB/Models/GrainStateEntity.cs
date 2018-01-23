@@ -1,20 +1,20 @@
 using Newtonsoft.Json;
 
-namespace Orleans.Clustering.CosmosDB.Models
+namespace Orleans.Persistence.CosmosDB.Models
 {
-    internal abstract class BaseEntity
+    internal class GrainStateEntity
     {
         private const string ID_FIELD = "id";
         private const string ETAG_FIELD = "_etag";
 
-        [JsonProperty(nameof(EntityType))]
-        public abstract string EntityType { get; }
-
         [JsonProperty(ID_FIELD)]
         public string Id { get; set; }
+        
+        [JsonProperty(nameof(GrainType))]
+        public string GrainType { get; set; }
 
-        [JsonProperty(nameof(ClusterId))]
-        public string ClusterId { get; set; }
+        [JsonProperty(nameof(State))]
+        public object State { get; set; }
 
         [JsonProperty(ETAG_FIELD)]
         public string ETag { get; set; }
