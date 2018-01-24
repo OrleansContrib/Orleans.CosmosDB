@@ -72,10 +72,10 @@ namespace Orleans.Persistence.CosmosDB
 
             try
             {
-                var spResponse = await this._dbClient.ExecuteStoredProcedureAsync<GrainStateEntity>(
+                var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<GrainStateEntity>(
                         UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, "ReadState"),
                         new RequestOptions { PartitionKey = new PartitionKey(grainType) },
-                        grainType, id).ConfigureAwait(false);
+                        grainType, id)).ConfigureAwait(false);
 
                 if (spResponse.Response?.State != null)
                 {
@@ -115,10 +115,10 @@ namespace Orleans.Persistence.CosmosDB
                     State = grainState.State
                 };
 
-                var spResponse = await this._dbClient.ExecuteStoredProcedureAsync<string>(
+                var spResponse = await ExecuteWithRetries( () => this._dbClient.ExecuteStoredProcedureAsync<string>(
                         UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, "WriteState"),
                         new RequestOptions { PartitionKey = new PartitionKey(grainType) },
-                        entity).ConfigureAwait(false);
+                        entity)).ConfigureAwait(false);
 
                 grainState.ETag = spResponse.Response;
             }
@@ -135,10 +135,10 @@ namespace Orleans.Persistence.CosmosDB
 
             try
             {
-                var spResponse = await this._dbClient.ExecuteStoredProcedureAsync<string>(
+                var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<string>(
                         UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, "ClearState"),
                         new RequestOptions { PartitionKey = new PartitionKey(grainType) },
-                        grainType, id, grainState.ETag, this._options.DeleteOnClear).ConfigureAwait(false);
+                        grainType, id, grainState.ETag, this._options.DeleteOnClear)).ConfigureAwait(false);
 
                 grainState.ETag = spResponse.Response;
             }
@@ -153,6 +153,45 @@ namespace Orleans.Persistence.CosmosDB
         {
             this._dbClient.Dispose();
             return Task.CompletedTask;
+        }
+
+        private static async Task<TResult> ExecuteWithRetries<TResult>(Func<Task<TResult>> clientFunc)
+        {
+            // From:  https://blogs.msdn.microsoft.com/bigdatasupport/2015/09/02/dealing-with-requestratetoolarge-errors-in-azure-documentdb-and-testing-performance/
+
+            TimeSpan sleepTime = TimeSpan.Zero;
+
+            while (true)
+            {
+                try
+                {
+                    return await clientFunc();
+                }
+                catch(DocumentClientException dce)
+                {
+                    if((int)dce.StatusCode != 429)
+                    {
+                        throw dce;
+                    }
+                }
+                catch(AggregateException ae)
+                {
+                    if(!(ae.InnerException is DocumentClientException))
+                    {
+                        throw ae;
+                    }
+
+                    DocumentClientException dce = (DocumentClientException)ae.InnerException;
+                    if((int)dce.StatusCode  != 429)
+                    {
+                        throw dce;
+                    }
+
+                    sleepTime = dce.RetryAfter;
+
+                    await Task.Delay(sleepTime);
+                }
+            }
         }
 
         private string GetKeyString(GrainReference grainReference) => $"{this._serviceId}_{grainReference.ToKeyString()}";
