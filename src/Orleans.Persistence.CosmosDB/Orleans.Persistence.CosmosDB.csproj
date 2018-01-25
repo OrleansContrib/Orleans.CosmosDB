@@ -23,6 +23,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\AssemblyInfo.cs" Link="AssemblyInfo.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Azure.DocumentDB.Core" Version="1.7.1" />
     <PackageReference Include="Microsoft.Orleans.OrleansRuntime" Version="2.0.0-beta3" />
   </ItemGroup>
