@@ -3,6 +3,8 @@ function WriteState(entity) {
   var collection = context.getCollection();
   var response = context.getResponse();
 
+  if (!entity) throw new Error('entity is required');
+ 
   var query = 'SELECT c.id, c._self FROM c WHERE c.GrainType = "' + entity.GrainType + '" AND c.id = "' + entity.id + '"';
   var accept = collection.queryDocuments(collection.getSelfLink(), query, {},
     function (err, docs, responseOptions) {
