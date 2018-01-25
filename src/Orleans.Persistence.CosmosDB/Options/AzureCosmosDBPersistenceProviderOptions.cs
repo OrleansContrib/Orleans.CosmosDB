@@ -38,5 +38,18 @@ namespace Orleans.Persistence.CosmosDB.Options
 
         [JsonProperty(nameof(DeleteOnClear))]
         public bool DeleteOnClear { get; set; }
+
+        /// <summary>
+        /// Automatically add/update stored procudures on initialization.  This may result in slight downtime due to stored procedures having to be deleted and recreated in partitioned environments.
+        /// Make sure this is false if you wish to strictly control downtime.
+        /// </summary>
+        [JsonProperty(nameof(AutoUpdateStoredProcedures))]
+        public bool AutoUpdateStoredProcedures { get; set; }
+
+        /// <summary>
+        /// Delete the database on initialization.  Useful for testing scenarios.
+        /// </summary>
+        [JsonProperty(nameof(DropDatabaseOnInit))]
+        public bool DropDatabaseOnInit { get; set; }
     }
 }
