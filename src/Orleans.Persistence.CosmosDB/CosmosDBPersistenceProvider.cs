@@ -115,10 +115,10 @@ namespace Orleans.Persistence.CosmosDB
                     State = grainState.State
                 };
 
-                var spResponse = await ExecuteWithRetries( () => this._dbClient.ExecuteStoredProcedureAsync<string>(
-                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, "WriteState"),
-                        new RequestOptions { PartitionKey = new PartitionKey(grainType) },
-                        entity)).ConfigureAwait(false);
+                var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<string>(
+                       UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, "WriteState"),
+                       new RequestOptions { PartitionKey = new PartitionKey(grainType) },
+                       entity)).ConfigureAwait(false);
 
                 grainState.ETag = spResponse.Response;
             }
@@ -167,24 +167,24 @@ namespace Orleans.Persistence.CosmosDB
                 {
                     return await clientFunc();
                 }
-                catch(DocumentClientException dce)
+                catch (DocumentClientException dce)
                 {
-                    if((int)dce.StatusCode != 429)
+                    if ((int)dce.StatusCode != 429)
                     {
-                        throw dce;
+                        throw;
                     }
                 }
-                catch(AggregateException ae)
+                catch (AggregateException ae)
                 {
-                    if(!(ae.InnerException is DocumentClientException))
+                    if (!(ae.InnerException is DocumentClientException))
                     {
-                        throw ae;
+                        throw;
                     }
 
                     DocumentClientException dce = (DocumentClientException)ae.InnerException;
-                    if((int)dce.StatusCode  != 429)
+                    if ((int)dce.StatusCode != 429)
                     {
-                        throw dce;
+                        throw;
                     }
 
                     sleepTime = dce.RetryAfter;
@@ -249,11 +249,15 @@ namespace Orleans.Persistence.CosmosDB
                 {
                     insertStoredProc = true;
                 }
+                else
+                {
+                    throw;
+                }
             }
             catch (Exception exc)
             {
                 this._logger.LogError(exc, $"Failure Updating Stored Procecure {name}");
-                throw exc;
+                throw;
             }
 
             if (insertStoredProc)

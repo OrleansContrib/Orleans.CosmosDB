@@ -17,6 +17,7 @@ namespace Orleans.Clustering.CosmosDB
 {
     internal class CosmosDBGatewayListProvider : IGatewayListProvider
     {
+        private const string SPROC = "GetAliveGateways";
         private readonly AzureCosmosDBGatewayOptions _options;
         private readonly ILoggerFactory _loggerFactory;
         private readonly TimeSpan _maxStaleness;
@@ -38,7 +39,7 @@ namespace Orleans.Clustering.CosmosDB
             try
             {
                 var spResponse = await this._dbClient.ExecuteStoredProcedureAsync<List<SiloEntity>>(
-                    UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, "GetAliveGateways"),
+                    UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, SPROC),
                     new RequestOptions { PartitionKey = new PartitionKey(this._options.ClusterId) },
                     this._options.ClusterId);
 

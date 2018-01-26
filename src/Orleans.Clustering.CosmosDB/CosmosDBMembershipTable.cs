@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orleans.Clustering.CosmosDB.Models;
 using Orleans.Clustering.CosmosDB.Options;
+using Orleans.Clustering.CosmosDB.Properties;
 using Orleans.Runtime;
 using System;
 using System.Collections.Generic;
@@ -15,6 +16,14 @@ namespace Orleans.Clustering.CosmosDB
 {
     internal class CosmosDBMembershipTable : IMembershipTable
     {
+        private const string DELETE_ALL_SPROC = "DeleteAllEntries";
+        private const string GET_ALIVE_GATEWAYS_SPROC = "GetAliveGateways";
+        private const string INSERT_SILO_SPROC = "InsertSiloEntity";
+        private const string READ_ALL_SPROC = "ReadAll";
+        private const string READ_SILO_SPROC = "ReadSiloEntity";
+        private const string UPDATE_I_AM_ALIVE_SPROC = "UpdateIAmAlive";
+        private const string UPDATE_SILO = "UpdateSiloEntity";
+        private const string NOT_FOUND_CODE = "NotFound";
         private const string CLUSTER_VERSION_ID = "ClusterVersion";
         private const string PARTITION_KEY = "/ClusterId";
         private readonly ILoggerFactory _loggerFactory;
@@ -77,7 +86,7 @@ namespace Orleans.Clustering.CosmosDB
             try
             {
                 var spResponse = await this._dbClient.ExecuteStoredProcedureAsync<ReadResponse>(
-                    UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, "ReadAll"),
+                    UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, READ_ALL_SPROC),
                     new RequestOptions { PartitionKey = new PartitionKey(this._options.ClusterId) },
                     this._options.ClusterId);
 
@@ -122,7 +131,7 @@ namespace Orleans.Clustering.CosmosDB
         public Task DeleteMembershipTableEntries(string clusterId)
         {
             return this._dbClient.ExecuteStoredProcedureAsync<int>(
-                UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, "DeleteAllEntries"),
+                UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, DELETE_ALL_SPROC),
                         new RequestOptions { PartitionKey = new PartitionKey(clusterId) },
                         clusterId);
         }
@@ -135,7 +144,7 @@ namespace Orleans.Clustering.CosmosDB
                 var versionEntity = BuildVersionEntity(tableVersion);
 
                 var spResponse = await this._dbClient.ExecuteStoredProcedureAsync<bool>(
-                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, "InsertSiloEntity"),
+                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, INSERT_SILO_SPROC),
                         new RequestOptions { PartitionKey = new PartitionKey(this._options.ClusterId) },
                         siloEntity, versionEntity);
 
@@ -155,7 +164,7 @@ namespace Orleans.Clustering.CosmosDB
             try
             {
                 var spResponse = await this._dbClient.ExecuteStoredProcedureAsync<ReadResponse>(
-                    UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, "ReadSiloEntity"),
+                    UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, READ_SILO_SPROC),
                     new RequestOptions { PartitionKey = new PartitionKey(this._options.ClusterId) },
                     this._options.ClusterId, id);
 
@@ -205,11 +214,11 @@ namespace Orleans.Clustering.CosmosDB
                 var siloEntity = ConvertToEntity(entry, this._options.ClusterId);
 
                 var spResponse = await this._dbClient.ExecuteStoredProcedureAsync<bool>(
-                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, "UpdateIAmAlive"),
+                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, UPDATE_I_AM_ALIVE_SPROC),
                         new RequestOptions { PartitionKey = new PartitionKey(this._options.ClusterId) },
                         siloEntity.Id, siloEntity.IAmAliveTime);
 
-                if(!spResponse.Response) throw new InvalidOperationException("Unable to update IAmAlive");
+                if (!spResponse.Response) throw new InvalidOperationException("Unable to update IAmAlive");
             }
             catch (DocumentClientException)
             {
@@ -227,7 +236,7 @@ namespace Orleans.Clustering.CosmosDB
                 var versionEntity = BuildVersionEntity(tableVersion);
 
                 var spResponse = await this._dbClient.ExecuteStoredProcedureAsync<bool>(
-                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, "UpdateSiloEntity"),
+                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, UPDATE_SILO),
                         new RequestOptions { PartitionKey = new PartitionKey(this._options.ClusterId) },
                         siloEntity, versionEntity);
 
@@ -238,29 +247,6 @@ namespace Orleans.Clustering.CosmosDB
                 if (exc.StatusCode == HttpStatusCode.PreconditionFailed) return false;
                 throw;
             }
-        }
-
-        private async Task TryCreateCosmosDBResources()
-        {
-            await this._dbClient.CreateDatabaseIfNotExistsAsync(new Database { Id = this._options.DB });
-
-            var clusterCollection = new DocumentCollection
-            {
-                Id = this._options.Collection
-            };
-            clusterCollection.PartitionKey.Paths.Add(PARTITION_KEY);
-            // TODO: Set indexing policy to the collection
-
-            await this._dbClient.CreateDocumentCollectionIfNotExistsAsync(
-                UriFactory.CreateDatabaseUri(this._options.DB),
-                clusterCollection,
-                new RequestOptions
-                {
-                    PartitionKey = new PartitionKey(PARTITION_KEY),
-                    //TODO: Check the consistency level for the emulator
-                    //ConsistencyLevel = ConsistencyLevel.Strong,
-                    OfferThroughput = this._options.CollectionThroughput
-                });
         }
 
         private static MembershipEntry ParseEntity(SiloEntity entity)
@@ -347,6 +333,86 @@ namespace Orleans.Clustering.CosmosDB
                 Id = CLUSTER_VERSION_ID,
                 ETag = tableVersion.VersionEtag
             };
+        }
+
+        private async Task TryCreateCosmosDBResources()
+        {
+            await this._dbClient.CreateDatabaseIfNotExistsAsync(new Database { Id = this._options.DB });
+
+            var clusterCollection = new DocumentCollection
+            {
+                Id = this._options.Collection
+            };
+            clusterCollection.PartitionKey.Paths.Add(PARTITION_KEY);
+            // TODO: Set indexing policy to the collection
+
+            await this._dbClient.CreateDocumentCollectionIfNotExistsAsync(
+                UriFactory.CreateDatabaseUri(this._options.DB),
+                clusterCollection,
+                new RequestOptions
+                {
+                    PartitionKey = new PartitionKey(PARTITION_KEY),
+                    //TODO: Check the consistency level for the emulator
+                    //ConsistencyLevel = ConsistencyLevel.Strong,
+                    OfferThroughput = this._options.CollectionThroughput
+                });
+        }
+
+        private async Task UpdateStoredProcedures()
+        {
+            await this.UpdateStoredProcedure(DELETE_ALL_SPROC, Resources.DeleteAllEntries);
+            await this.UpdateStoredProcedure(GET_ALIVE_GATEWAYS_SPROC, Resources.GetAliveGateways);
+            await this.UpdateStoredProcedure(INSERT_SILO_SPROC, Resources.InsertSiloEntity);
+            await this.UpdateStoredProcedure(READ_ALL_SPROC, Resources.ReadAll);
+            await this.UpdateStoredProcedure(READ_SILO_SPROC, Resources.ReadSiloEntity);
+            await this.UpdateStoredProcedure(UPDATE_I_AM_ALIVE_SPROC, Resources.UpdateIAmAlive);
+            await this.UpdateStoredProcedure(UPDATE_SILO, Resources.UpdateSiloEntity);
+        }
+
+        private async Task UpdateStoredProcedure(string name, string content)
+        {
+            // Partitioned Collections do not support upserts, so check if they exist, and delete/re-insert them if they've changed.
+            var insertStoredProc = false;
+
+            try
+            {
+                var storedProcUri = UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, name);
+                var storedProcResponse = await this._dbClient.ReadStoredProcedureAsync(storedProcUri);
+                var storedProc = storedProcResponse.Resource;
+
+                if (storedProc == null || !Equals(storedProc.Body, content))
+                {
+                    insertStoredProc = true;
+                    await this._dbClient.DeleteStoredProcedureAsync(storedProcUri);
+                }
+            }
+            catch (DocumentClientException dce)
+            {
+                if (Equals(NOT_FOUND_CODE, dce?.Error?.Code))
+                {
+                    insertStoredProc = true;
+                }
+                else
+                {
+                    throw;
+                }
+            }
+            catch (Exception exc)
+            {
+                this._logger.LogError(exc, $"Failure Updating Stored Procecure {name}");
+                throw;
+            }
+
+            if (insertStoredProc)
+            {
+                var newStoredProc = new StoredProcedure()
+                {
+                    Id = name,
+                    Body = content
+                };
+
+                await this._dbClient.CreateStoredProcedureAsync(UriFactory.CreateDocumentCollectionUri(this._options.DB, this._options.Collection), newStoredProc);
+            }
         }
     }
 }

@@ -34,6 +34,9 @@ namespace Orleans.CosmosDB.Tests
                 AccountEndpoint = "https://localhost:8081",
                 AccountKey = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
                 ClusterId = this.clusterId,
+                CanCreateResources = true,
+                AutoUpdateStoredProcedures = true,
+                DropDatabaseOnInit = true
                 //ConnectionProtocol = Microsoft.Azure.Documents.Client.Protocol.Https,
 
             };
@@ -46,7 +49,7 @@ namespace Orleans.CosmosDB.Tests
             {
                 AccountEndpoint = "https://localhost:8081",
                 AccountKey = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
-                ClusterId = this.clusterId
+                ClusterId = this.clusterId,
             };
             return new CosmosDBGatewayListProvider(loggerFactory, Options.Create(options), this.clientConfiguration);
         }

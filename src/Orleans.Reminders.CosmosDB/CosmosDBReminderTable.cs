@@ -1,25 +1,34 @@
-using System;
-using System.Threading.Tasks;
 using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orleans.Reminders.CosmosDB.Models;
 using Orleans.Reminders.CosmosDB.Options;
+using Orleans.Reminders.CosmosDB.Properties;
 using Orleans.Runtime;
 using Orleans.Runtime.Configuration;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace Orleans.Reminders.CosmosDB
 {
     internal class CosmosDBReminderTable : IReminderTable
     {
-        private const string PARTITION_KEY = "/PartitionKey";
+        private const string READ_RANGE_ROW_SPROC = "ReadRangeRows";
+        private const string READ_ROW_SPROC = "ReadRow";
+        private const string READ_ROWS_SPROC = "ReadRows";
+        private const string DELETE_ROW_SPROC = "DeleteRow";
+        private const string UPSERT_ROW_SPROC = "UpsertRow";
+        private const string DELETE_ROWS_SPROC = "DeleteRows";
+        private const string NOT_FOUND_CODE = "NotFound";
         private readonly IGrainReferenceConverter _grainReferenceConverter;
         private readonly ILogger _logger;
         private readonly ILoggerFactory _loggerFactory;
         private readonly SiloOptions _siloOptions;
         private readonly AzureCosmosDBReminderProviderOptions _options;
-        private IDocumentClient _dbClient;
+        private DocumentClient _dbClient;
 
         public CosmosDBReminderTable(IGrainReferenceConverter grainReferenceConverter,
             ILoggerFactory loggerFactory,
@@ -30,119 +39,279 @@ namespace Orleans.Reminders.CosmosDB
             this._logger = loggerFactory.CreateLogger(nameof(CosmosDBReminderTable));
             this._siloOptions = siloOptions.Value;
             this._options = options.Value;
+            this._grainReferenceConverter = grainReferenceConverter;
         }
 
         public async Task Init(GlobalConfiguration config)
         {
-            var dbClient = new DocumentClient(new Uri(this._options.AccountEndpoint), this._options.AccountKey,
+            this._dbClient = new DocumentClient(new Uri(this._options.AccountEndpoint), this._options.AccountKey,
                     new ConnectionPolicy
                     {
                         ConnectionMode = this._options.ConnectionMode,
                         ConnectionProtocol = this._options.ConnectionProtocol
                     });
 
-            await dbClient.OpenAsync();
+            await this._dbClient.OpenAsync();
 
             if (this._options.CanCreateResources)
             {
-                await dbClient.CreateDatabaseIfNotExistsAsync(new Database { Id = this._options.DB });
-
-                var clusterCollection = new DocumentCollection
+                if (this._options.DropDatabaseOnInit)
                 {
-                    Id = this._options.Collection
-                };
-                clusterCollection.PartitionKey.Paths.Add(PARTITION_KEY);
-                // TODO: Set indexing policy to the collection
+                    await this._dbClient.DeleteDatabaseAsync(UriFactory.CreateDatabaseUri(this._options.DB));
+                }
 
-                await dbClient.CreateDocumentCollectionIfNotExistsAsync(
-                    UriFactory.CreateDatabaseUri(this._options.DB),
-                    clusterCollection,
-                    new RequestOptions
-                    {
-                        PartitionKey = new PartitionKey(PARTITION_KEY),
-                        //TODO: Check the consistency level for the emulator
-                        //ConsistencyLevel = ConsistencyLevel.Strong,
-                        OfferThroughput = this._options.CollectionThroughput
-                    });
+                await TryCreateCosmosDBResources();
+
+                if (this._options.AutoUpdateStoredProcedures)
+                {
+                    await UpdateStoredProcedures();
+                }
             }
-
-            this._dbClient = dbClient;
         }
 
         public async Task<ReminderEntry> ReadRow(GrainReference grainRef, string reminderName)
         {
             try
             {
-                var pk = new ReminderEntityPartitionKey
-                {
-                    ServiceId = this._siloOptions.ServiceId,
-                    GrainRefConsistentHash = $"{grainRef.GetUniformHashCode():X8}"
-                };
+                var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<ReminderEntity>(
+                       UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, READ_ROW_SPROC),
+                       this._siloOptions.ServiceId, grainRef.ToKeyString(), reminderName)).ConfigureAwait(false);
 
-                var spResponse = await this._dbClient.ExecuteStoredProcedureAsync<ReminderEntity>(
-                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, "GetReminder"),
-                        new RequestOptions { PartitionKey = new PartitionKey(pk) },
-                        grainRef, reminderName).ConfigureAwait(false);
+                if (spResponse.Response == null) return null;
 
-                ReminderEntry entry = null;
-
-                if (spResponse.Response != null)
-                {
-                    ReminderEntity entity = spResponse.Response;
-                    entry = new ReminderEntry
-                    {
-                        GrainRef = entity.GrainReference,
-                        ReminderName = entity.Name,
-                        StartAt = entity.StartAt.DateTime,
-                        Period = entity.Period,
-                        ETag = entity.ETag
-                    };
-                }
-
-                return entry;
+                return this.FromEntity(spResponse.Response);
             }
             catch (Exception exc)
             {
+                this._logger.LogError(exc, $"Failure reading reminder {reminderName} for service {this._siloOptions.ServiceId} and grain {grainRef.ToKeyString()}.");
                 throw;
             }
         }
 
-        public Task<ReminderTableData> ReadRows(GrainReference key)
+        public async Task<ReminderTableData> ReadRows(GrainReference key)
         {
             try
             {
-                var pk = new ReminderEntityPartitionKey
-                {
-                    ServiceId = this._siloOptions.ServiceId,
-                    GrainRefConsistentHash = $"{key.GetUniformHashCode():X8}"
-                };
+                var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<List<ReminderEntity>>(
+                       UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, READ_ROWS_SPROC),
+                       this._siloOptions.ServiceId, key.ToKeyString())).ConfigureAwait(false);
 
-                return null;
+                return new ReminderTableData(spResponse.Response.Select(this.FromEntity));
             }
             catch (Exception exc)
             {
+                this._logger.LogError(exc, $"Failure reading reminders for Grain Type {key.InterfaceName} with Id {key.ToKeyString()}.");
                 throw;
             }
         }
 
-        public Task<ReminderTableData> ReadRows(uint begin, uint end)
+        public async Task<ReminderTableData> ReadRows(uint begin, uint end)
         {
-            throw new NotImplementedException();
+            try
+            {
+                var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<List<ReminderEntity>>(
+                       UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, READ_RANGE_ROW_SPROC),
+                       this._siloOptions.ServiceId, begin, end)).ConfigureAwait(false);
+
+                return new ReminderTableData(spResponse.Response.Select(this.FromEntity));
+            }
+            catch (Exception exc)
+            {
+                this._logger.LogError(exc, $"Failure reading reminders for Service {this._siloOptions.ServiceId} for range {begin} to {end}.");
+                throw;
+            }
         }
 
-        public Task<bool> RemoveRow(GrainReference grainRef, string reminderName, string eTag)
+        public async Task<bool> RemoveRow(GrainReference grainRef, string reminderName, string eTag)
         {
-            throw new NotImplementedException();
+            try
+            {
+                var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<bool>(
+                       UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, DELETE_ROW_SPROC),
+                       this._siloOptions.ServiceId, grainRef.ToKeyString(), reminderName, eTag)).ConfigureAwait(false);
+
+                return spResponse.Response;
+            }
+            catch (Exception exc)
+            {
+                this._logger.LogError(exc, $"Failure removing reminders for Service {this._siloOptions.ServiceId} with grainId {grainRef.ToKeyString()} and name {reminderName}.");
+                throw;
+            }
         }
 
-        public Task TestOnlyClearTable()
+        public async Task TestOnlyClearTable()
         {
-            throw new NotImplementedException();
+            try
+            {
+                await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<bool>(
+                       UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, DELETE_ROWS_SPROC),
+                       this._siloOptions.ServiceId)).ConfigureAwait(false);
+            }
+            catch (Exception exc)
+            {
+                this._logger.LogError(exc, $"Failure to clear reminders for Service {this._siloOptions.ServiceId}.");
+                throw;
+            }
         }
 
-        public Task<string> UpsertRow(ReminderEntry entry)
+        public async Task<string> UpsertRow(ReminderEntry entry)
         {
-            throw new NotImplementedException();
+            try
+            {
+                ReminderEntity entity = ToEntity(entry);
+                var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<string>(
+                       UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, UPSERT_ROW_SPROC),
+                       entity)).ConfigureAwait(false);
+
+                return spResponse.Response;
+            }
+            catch (Exception exc)
+            {
+                this._logger.LogError(exc, $"Failure to upsert reminder for Service {this._siloOptions.ServiceId}.");
+                throw;
+            }
+        }
+
+        private ReminderEntity ToEntity(ReminderEntry entry)
+        {
+            return new ReminderEntity
+            {
+                ServiceId = this._siloOptions.ServiceId,
+                GrainHash = entry.GrainRef.GetUniformHashCode(),
+                GrainId = entry.GrainRef.ToKeyString(),
+                Name = entry.ReminderName,
+                StartAt = entry.StartAt,
+                Period = entry.Period
+            };
+        }
+
+        private static async Task<TResult> ExecuteWithRetries<TResult>(Func<Task<TResult>> clientFunc)
+        {
+            // From:  https://blogs.msdn.microsoft.com/bigdatasupport/2015/09/02/dealing-with-requestratetoolarge-errors-in-azure-documentdb-and-testing-performance/
+
+            TimeSpan sleepTime = TimeSpan.Zero;
+
+            while (true)
+            {
+                try
+                {
+                    return await clientFunc();
+                }
+                catch (DocumentClientException dce)
+                {
+                    if ((int)dce.StatusCode != 429)
+                    {
+                        throw;
+                    }
+                }
+                catch (AggregateException ae)
+                {
+                    if (!(ae.InnerException is DocumentClientException))
+                    {
+                        throw;
+                    }
+
+                    DocumentClientException dce = (DocumentClientException)ae.InnerException;
+                    if ((int)dce.StatusCode != 429)
+                    {
+                        throw;
+                    }
+
+                    sleepTime = dce.RetryAfter;
+
+                    await Task.Delay(sleepTime);
+                }
+            }
+        }
+
+        private ReminderEntry FromEntity(ReminderEntity entity)
+        {
+            return new ReminderEntry
+            {
+                GrainRef = this._grainReferenceConverter.GetGrainFromKeyString(entity.GrainId),
+                ReminderName = entity.Name,
+                Period = entity.Period,
+                StartAt = entity.StartAt.UtcDateTime,
+                ETag = entity.ETag
+            };
+        }
+
+        private async Task TryCreateCosmosDBResources()
+        {
+            await this._dbClient.CreateDatabaseIfNotExistsAsync(new Database { Id = this._options.DB });
+
+            var clusterCollection = new DocumentCollection
+            {
+                Id = this._options.Collection
+            };
+
+            // TODO: Set indexing policy to the collection
+
+            await this._dbClient.CreateDocumentCollectionIfNotExistsAsync(
+                UriFactory.CreateDatabaseUri(this._options.DB),
+                clusterCollection,
+                new RequestOptions
+                {
+                    //TODO: Check the consistency level for the emulator
+                    //ConsistencyLevel = ConsistencyLevel.Strong,
+                    OfferThroughput = this._options.CollectionThroughput
+                });
+        }
+
+        private async Task UpdateStoredProcedures()
+        {
+            await this.UpdateStoredProcedure(READ_ROWS_SPROC, Resources.ReadRows);
+            await this.UpdateStoredProcedure(READ_ROW_SPROC, Resources.ReadRow);
+            await this.UpdateStoredProcedure(READ_RANGE_ROW_SPROC, Resources.ReadRangeRows);
+            await this.UpdateStoredProcedure(DELETE_ROW_SPROC, Resources.DeleteRow);
+            await this.UpdateStoredProcedure(DELETE_ROWS_SPROC, Resources.DeleteRows);
+            await this.UpdateStoredProcedure(UPSERT_ROW_SPROC, Resources.UpsertRow);
+        }
+
+        private async Task UpdateStoredProcedure(string name, string content)
+        {
+            // Partitioned Collections do not support upserts, so check if they exist, and delete/re-insert them if they've changed.
+            var insertStoredProc = false;
+
+            try
+            {
+                var storedProcUri = UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, name);
+                var storedProcResponse = await this._dbClient.ReadStoredProcedureAsync(storedProcUri);
+                var storedProc = storedProcResponse.Resource;
+
+                if (storedProc == null || !Equals(storedProc.Body, content))
+                {
+                    insertStoredProc = true;
+                    await this._dbClient.DeleteStoredProcedureAsync(storedProcUri);
+                }
+            }
+            catch (DocumentClientException dce)
+            {
+                if (Equals(NOT_FOUND_CODE, dce?.Error?.Code))
+                {
+                    insertStoredProc = true;
+                }
+                else
+                {
+                    throw;
+                }
+            }
+            catch (Exception exc)
+            {
+                this._logger.LogError(exc, $"Failure Updating Stored Procecure {name}");
+                throw;
+            }
+
+            if (insertStoredProc)
+            {
+                var newStoredProc = new StoredProcedure()
+                {
+                    Id = name,
+                    Body = content
+                };
+
+                await this._dbClient.CreateStoredProcedureAsync(UriFactory.CreateDocumentCollectionUri(this._options.DB, this._options.Collection), newStoredProc);
+            }
         }
     }
 }

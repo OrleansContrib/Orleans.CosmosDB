@@ -1,4 +1,6 @@
 using Orleans.Providers;
+using Orleans.Runtime;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
@@ -8,6 +10,10 @@ namespace Orleans.CosmosDB.Tests.Grains
     {
         Task Write(string text);
         Task<List<string>> Read();
+        Task<IGrainReminder> RegisterReminder(string name);
+        Task<bool> ReminderExist(string name);
+        Task<bool> ReminderTicked();
+        Task DismissReminder(string name);
     }
 
     public class TestState
@@ -16,11 +22,41 @@ namespace Orleans.CosmosDB.Tests.Grains
     }
 
     [StorageProvider(ProviderName = PersistenceTests.TEST_STORAGE)]
-    public class TestGrain : Grain<TestState>, ITestGrain
+    public class TestGrain : Grain<TestState>, ITestGrain, IRemindable
     {
+        private bool ticked = false;
+
+        public async Task DismissReminder(string name)
+        {
+            var r = await GetReminder(name);
+            await UnregisterReminder(r);
+        }
+
         public Task<List<string>> Read()
         {
             return Task.FromResult(this.State.Data);
+        }
+
+        public Task ReceiveReminder(string reminderName, TickStatus status)
+        {
+            this.ticked = true;
+            return Task.CompletedTask;
+        }
+
+        public Task<IGrainReminder> RegisterReminder(string name)
+        {
+            return RegisterOrUpdateReminder(name, TimeSpan.FromSeconds(2), TimeSpan.FromMinutes(1));
+        }
+
+        public async Task<bool> ReminderExist(string name)
+        {
+            var r = await GetReminder(name);
+            return r != null;
+        }
+
+        public Task<bool> ReminderTicked()
+        {
+            return Task.FromResult(ticked);
         }
 
         public Task Write(string text)
