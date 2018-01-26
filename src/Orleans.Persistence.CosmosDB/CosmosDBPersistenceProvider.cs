@@ -92,7 +92,7 @@ namespace Orleans.Persistence.CosmosDB
                 }
 
                 this._logger.LogError(dce, $"Failure reading state for Grain Type {grainType} with Id {id}.");
-                throw dce;
+                throw;
             }
             catch (Exception exc)
             {
@@ -115,7 +115,7 @@ namespace Orleans.Persistence.CosmosDB
                     State = grainState.State
                 };
 
-                var spResponse = await ExecuteWithRetries( () => this._dbClient.ExecuteStoredProcedureAsync<string>(
+                var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<string>(
                         UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, "WriteState"),
                         new RequestOptions { PartitionKey = new PartitionKey(grainType) },
                         entity)).ConfigureAwait(false);
@@ -158,7 +158,6 @@ namespace Orleans.Persistence.CosmosDB
         private static async Task<TResult> ExecuteWithRetries<TResult>(Func<Task<TResult>> clientFunc)
         {
             // From:  https://blogs.msdn.microsoft.com/bigdatasupport/2015/09/02/dealing-with-requestratetoolarge-errors-in-azure-documentdb-and-testing-performance/
-
             TimeSpan sleepTime = TimeSpan.Zero;
 
             while (true)
@@ -171,20 +170,20 @@ namespace Orleans.Persistence.CosmosDB
                 {
                     if((int)dce.StatusCode != 429)
                     {
-                        throw dce;
+                        throw;
                     }
                 }
                 catch(AggregateException ae)
                 {
                     if(!(ae.InnerException is DocumentClientException))
                     {
-                        throw ae;
+                        throw;
                     }
 
                     DocumentClientException dce = (DocumentClientException)ae.InnerException;
                     if((int)dce.StatusCode  != 429)
                     {
-                        throw dce;
+                        throw;
                     }
 
                     sleepTime = dce.RetryAfter;
@@ -249,11 +248,15 @@ namespace Orleans.Persistence.CosmosDB
                 {
                     insertStoredProc = true;
                 }
+                else
+                {
+                    throw;
+                }
             }
             catch (Exception exc)
             {
                 this._logger.LogError(exc, $"Failure Updating Stored Procecure {name}");
-                throw exc;
+                throw;
             }
 
             if (insertStoredProc)
