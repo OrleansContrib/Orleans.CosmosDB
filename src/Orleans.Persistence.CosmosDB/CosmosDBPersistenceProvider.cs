@@ -82,6 +82,11 @@ namespace Orleans.Persistence.CosmosDB
                     grainState.State = ((JObject)spResponse.Response.State).ToObject(grainState.State.GetType()) ?? Activator.CreateInstance(grainState.State.GetType());
                     grainState.ETag = spResponse.Response.ETag;
                 }
+                else
+                {
+                    // Default state, to prevent null reference exceptions when the grain is first activated
+                    grainState.State = Activator.CreateInstance(grainState.State.GetType());
+                }
             }
             catch (DocumentClientException dce)
             {
