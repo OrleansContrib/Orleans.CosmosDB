@@ -26,7 +26,7 @@ namespace Orleans.Persistence.CosmosDB.Options
         public int CollectionThroughput { get; set; } = ORLEANS_STORAGE_COLLECTION_THROUGHPUT;
 
         [JsonProperty(nameof(CanCreateResources))]
-        public bool CanCreateResources { get; set; } = true;
+        public bool CanCreateResources { get; set; }
 
         [JsonProperty(nameof(ConnectionMode))]
         [JsonConverter(typeof(StringEnumConverter))]
