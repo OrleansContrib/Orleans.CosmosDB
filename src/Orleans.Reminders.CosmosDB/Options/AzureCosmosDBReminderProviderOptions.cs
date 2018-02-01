@@ -26,7 +26,7 @@ namespace Orleans.Reminders.CosmosDB.Options
         public int CollectionThroughput { get; set; } = ORLEANS_STORAGE_COLLECTION_THROUGHPUT;
 
         [JsonProperty(nameof(CanCreateResources))]
-        public bool CanCreateResources { get; set; }
+        public bool CanCreateResources { get; set; } = true;
 
         [JsonProperty(nameof(ConnectionMode))]
         [JsonConverter(typeof(StringEnumConverter))]

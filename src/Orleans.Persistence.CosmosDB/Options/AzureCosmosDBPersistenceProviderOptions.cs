@@ -9,7 +9,7 @@ namespace Orleans.Persistence.CosmosDB.Options
         private const string ORLEANS_DB = "Orleans";
         private const string ORLEANS_STORAGE_COLLECTION = "OrleansStorage";
         private const int ORLEANS_STORAGE_COLLECTION_THROUGHPUT = 400;
-
+        
         [JsonProperty(nameof(AccountEndpoint))]
         public string AccountEndpoint { get; set; }
 
@@ -26,7 +26,7 @@ namespace Orleans.Persistence.CosmosDB.Options
         public int CollectionThroughput { get; set; } = ORLEANS_STORAGE_COLLECTION_THROUGHPUT;
 
         [JsonProperty(nameof(CanCreateResources))]
-        public bool CanCreateResources { get; set; }
+        public bool CanCreateResources { get; set; } = true;
 
         [JsonProperty(nameof(ConnectionMode))]
         [JsonConverter(typeof(StringEnumConverter))]
