@@ -51,7 +51,17 @@ namespace Orleans.Clustering.CosmosDB
 
             if (this._options.CanCreateResources)
             {
+                if (this._options.DropDatabaseOnInit)
+                {
+                    await this._dbClient.DeleteDatabaseAsync(UriFactory.CreateDatabaseUri(this._options.DB));
+                }
+
                 await TryCreateCosmosDBResources();
+
+                if (this._options.AutoUpdateStoredProcedures)
+                {
+                    await UpdateStoredProcedures();
+                }
             }
 
             var versionEntity = (await this._dbClient.Query<ClusterVersionEntity>(

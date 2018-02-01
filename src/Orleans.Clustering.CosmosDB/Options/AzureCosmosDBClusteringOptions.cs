@@ -20,7 +20,7 @@ namespace Orleans.Clustering.CosmosDB.Options
         public string AccountKey { get; set; }
 
         [JsonProperty(nameof(CanCreateResources))]
-        public bool CanCreateResources { get; set; } = true;
+        public bool CanCreateResources { get; set; }
 
         [JsonProperty(nameof(DB))]
         public string DB { get; set; } = ORLEANS_DB;
