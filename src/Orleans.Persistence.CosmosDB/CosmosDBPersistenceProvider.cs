@@ -42,9 +42,9 @@ namespace Orleans.Persistence.CosmosDB
         {
             this._sprocFiles = new Dictionary<string, string>
             {
-                { WRITE_STATE_SPROC, "WriteState.js" },
-                { READ_STATE_SPROC, "ReadState.js" },
-                { CLEAR_STATE_SPROC, "ClearState.js" }
+                { WRITE_STATE_SPROC, $"{WRITE_STATE_SPROC}.js" },
+                { READ_STATE_SPROC, $"{READ_STATE_SPROC}.js" },
+                { CLEAR_STATE_SPROC, $"{CLEAR_STATE_SPROC}.js" }
             };
         }
 

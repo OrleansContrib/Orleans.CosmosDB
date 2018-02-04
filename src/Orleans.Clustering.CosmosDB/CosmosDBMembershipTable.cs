@@ -4,12 +4,13 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orleans.Clustering.CosmosDB.Models;
 using Orleans.Clustering.CosmosDB.Options;
-using Orleans.Clustering.CosmosDB.Properties;
 using Orleans.Runtime;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
+using System.Reflection;
 using System.Threading.Tasks;
 
 namespace Orleans.Clustering.CosmosDB
@@ -22,13 +23,15 @@ namespace Orleans.Clustering.CosmosDB
         private const string READ_ALL_SPROC = "ReadAll";
         private const string READ_SILO_SPROC = "ReadSiloEntity";
         private const string UPDATE_I_AM_ALIVE_SPROC = "UpdateIAmAlive";
-        private const string UPDATE_SILO = "UpdateSiloEntity";
-        private const string NOT_FOUND_CODE = "NotFound";
+        private const string UPDATE_SILO_SPROC = "UpdateSiloEntity";
         private const string CLUSTER_VERSION_ID = "ClusterVersion";
         private const string PARTITION_KEY = "/ClusterId";
+
+        private readonly Dictionary<string, string> _sprocFiles;
         private readonly ILoggerFactory _loggerFactory;
         private readonly ILogger _logger;
         private readonly AzureCosmosDBClusteringOptions _options;
+
         private DocumentClient _dbClient;
 
         public CosmosDBMembershipTable(ILoggerFactory loggerFactory, IOptions<AzureCosmosDBClusteringOptions> clusteringOptions)
@@ -36,6 +39,16 @@ namespace Orleans.Clustering.CosmosDB
             this._loggerFactory = loggerFactory;
             this._logger = loggerFactory?.CreateLogger<CosmosDBMembershipTable>();
             this._options = clusteringOptions.Value;
+            this._sprocFiles = new Dictionary<string, string>
+            {
+                { DELETE_ALL_SPROC, $"{DELETE_ALL_SPROC}.js" },
+                { GET_ALIVE_GATEWAYS_SPROC, $"{GET_ALIVE_GATEWAYS_SPROC}.js" },
+                { INSERT_SILO_SPROC, $"{INSERT_SILO_SPROC}.js" },
+                { READ_ALL_SPROC, $"{READ_ALL_SPROC}.js" },
+                { READ_SILO_SPROC, $"{READ_SILO_SPROC}.js" },
+                { UPDATE_I_AM_ALIVE_SPROC, $"{UPDATE_I_AM_ALIVE_SPROC}.js" },
+                { UPDATE_SILO_SPROC, $"{UPDATE_SILO_SPROC}.js" },
+            };
         }
 
         public async Task InitializeMembershipTable(bool tryInitTableVersion)
@@ -53,7 +66,7 @@ namespace Orleans.Clustering.CosmosDB
             {
                 if (this._options.DropDatabaseOnInit)
                 {
-                    await this._dbClient.DeleteDatabaseAsync(UriFactory.CreateDatabaseUri(this._options.DB));
+                    await TryDeleteDatabase();
                 }
 
                 await TryCreateCosmosDBResources();
@@ -246,7 +259,7 @@ namespace Orleans.Clustering.CosmosDB
                 var versionEntity = BuildVersionEntity(tableVersion);
 
                 var spResponse = await this._dbClient.ExecuteStoredProcedureAsync<bool>(
-                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, UPDATE_SILO),
+                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, UPDATE_SILO_SPROC),
                         new RequestOptions { PartitionKey = new PartitionKey(this._options.ClusterId) },
                         siloEntity, versionEntity);
 
@@ -345,6 +358,27 @@ namespace Orleans.Clustering.CosmosDB
             };
         }
 
+        private async Task TryDeleteDatabase()
+        {
+            try
+            {
+                var dbUri = UriFactory.CreateDatabaseUri(this._options.DB);
+                await this._dbClient.ReadDatabaseAsync(dbUri);
+                await this._dbClient.DeleteDatabaseAsync(dbUri);
+            }
+            catch (DocumentClientException dce)
+            {
+                if (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    return;
+                }
+                else
+                {
+                    throw;
+                }
+            }
+        }
+
         private async Task TryCreateCosmosDBResources()
         {
             await this._dbClient.CreateDatabaseIfNotExistsAsync(new Database { Id = this._options.DB });
@@ -370,13 +404,16 @@ namespace Orleans.Clustering.CosmosDB
 
         private async Task UpdateStoredProcedures()
         {
-            await this.UpdateStoredProcedure(DELETE_ALL_SPROC, Resources.DeleteAllEntries);
-            await this.UpdateStoredProcedure(GET_ALIVE_GATEWAYS_SPROC, Resources.GetAliveGateways);
-            await this.UpdateStoredProcedure(INSERT_SILO_SPROC, Resources.InsertSiloEntity);
-            await this.UpdateStoredProcedure(READ_ALL_SPROC, Resources.ReadAll);
-            await this.UpdateStoredProcedure(READ_SILO_SPROC, Resources.ReadSiloEntity);
-            await this.UpdateStoredProcedure(UPDATE_I_AM_ALIVE_SPROC, Resources.UpdateIAmAlive);
-            await this.UpdateStoredProcedure(UPDATE_SILO, Resources.UpdateSiloEntity);
+            var assembly = Assembly.GetExecutingAssembly();
+            foreach (var sproc in this._sprocFiles.Keys)
+            {
+                using (var fileStream = assembly.GetManifestResourceStream($"Orleans.Clustering.CosmosDB.Sprocs.{this._sprocFiles[sproc]}"))
+                using (var reader = new StreamReader(fileStream))
+                {
+                    var content = await reader.ReadToEndAsync();
+                    await UpdateStoredProcedure(sproc, content);
+                }
+            }
         }
 
         private async Task UpdateStoredProcedure(string name, string content)
@@ -398,7 +435,7 @@ namespace Orleans.Clustering.CosmosDB
             }
             catch (DocumentClientException dce)
             {
-                if (Equals(NOT_FOUND_CODE, dce?.Error?.Code))
+                if (dce.StatusCode == HttpStatusCode.NotFound)
                 {
                     insertStoredProc = true;
                 }

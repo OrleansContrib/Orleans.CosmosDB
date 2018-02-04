@@ -4,12 +4,14 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orleans.Reminders.CosmosDB.Models;
 using Orleans.Reminders.CosmosDB.Options;
-using Orleans.Reminders.CosmosDB.Properties;
 using Orleans.Runtime;
 using Orleans.Runtime.Configuration;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Net;
+using System.Reflection;
 using System.Threading.Tasks;
 
 namespace Orleans.Reminders.CosmosDB
@@ -22,12 +24,14 @@ namespace Orleans.Reminders.CosmosDB
         private const string DELETE_ROW_SPROC = "DeleteRow";
         private const string UPSERT_ROW_SPROC = "UpsertRow";
         private const string DELETE_ROWS_SPROC = "DeleteRows";
-        private const string NOT_FOUND_CODE = "NotFound";
+
+        private readonly Dictionary<string, string> _sprocFiles;
         private readonly IGrainReferenceConverter _grainReferenceConverter;
         private readonly ILogger _logger;
         private readonly ILoggerFactory _loggerFactory;
         private readonly SiloOptions _siloOptions;
         private readonly AzureCosmosDBReminderProviderOptions _options;
+
         private DocumentClient _dbClient;
 
         public CosmosDBReminderTable(IGrainReferenceConverter grainReferenceConverter,
@@ -40,6 +44,16 @@ namespace Orleans.Reminders.CosmosDB
             this._siloOptions = siloOptions.Value;
             this._options = options.Value;
             this._grainReferenceConverter = grainReferenceConverter;
+
+            this._sprocFiles = new Dictionary<string, string>
+            {
+                { READ_RANGE_ROW_SPROC, $"{READ_RANGE_ROW_SPROC}.js" },
+                { READ_ROW_SPROC, $"{READ_ROW_SPROC}.js" },
+                { READ_ROWS_SPROC, $"{READ_ROWS_SPROC}.js" },
+                { DELETE_ROW_SPROC, $"{DELETE_ROW_SPROC}.js" },
+                { UPSERT_ROW_SPROC, $"{UPSERT_ROW_SPROC}.js" },
+                { DELETE_ROWS_SPROC, $"{DELETE_ROWS_SPROC}.js" }
+            };
         }
 
         public async Task Init(GlobalConfiguration config)
@@ -57,7 +71,7 @@ namespace Orleans.Reminders.CosmosDB
             {
                 if (this._options.DropDatabaseOnInit)
                 {
-                    await this._dbClient.DeleteDatabaseAsync(UriFactory.CreateDatabaseUri(this._options.DB));
+                    await TryDeleteDatabase();
                 }
 
                 await TryCreateCosmosDBResources();
@@ -236,6 +250,27 @@ namespace Orleans.Reminders.CosmosDB
             };
         }
 
+        private async Task TryDeleteDatabase()
+        {
+            try
+            {
+                var dbUri = UriFactory.CreateDatabaseUri(this._options.DB);
+                await this._dbClient.ReadDatabaseAsync(dbUri);
+                await this._dbClient.DeleteDatabaseAsync(dbUri);
+            }
+            catch (DocumentClientException dce)
+            {
+                if (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    return;
+                }
+                else
+                {
+                    throw;
+                }
+            }
+        }
+
         private async Task TryCreateCosmosDBResources()
         {
             await this._dbClient.CreateDatabaseIfNotExistsAsync(new Database { Id = this._options.DB });
@@ -260,12 +295,16 @@ namespace Orleans.Reminders.CosmosDB
 
         private async Task UpdateStoredProcedures()
         {
-            await this.UpdateStoredProcedure(READ_ROWS_SPROC, Resources.ReadRows);
-            await this.UpdateStoredProcedure(READ_ROW_SPROC, Resources.ReadRow);
-            await this.UpdateStoredProcedure(READ_RANGE_ROW_SPROC, Resources.ReadRangeRows);
-            await this.UpdateStoredProcedure(DELETE_ROW_SPROC, Resources.DeleteRow);
-            await this.UpdateStoredProcedure(DELETE_ROWS_SPROC, Resources.DeleteRows);
-            await this.UpdateStoredProcedure(UPSERT_ROW_SPROC, Resources.UpsertRow);
+            var assembly = Assembly.GetExecutingAssembly();
+            foreach (var sproc in this._sprocFiles.Keys)
+            {
+                using (var fileStream = assembly.GetManifestResourceStream($"Orleans.Reminders.CosmosDB.Sprocs.{this._sprocFiles[sproc]}"))
+                using (var reader = new StreamReader(fileStream))
+                {
+                    var content = await reader.ReadToEndAsync();
+                    await UpdateStoredProcedure(sproc, content);
+                }
+            }
         }
 
         private async Task UpdateStoredProcedure(string name, string content)
@@ -287,7 +326,7 @@ namespace Orleans.Reminders.CosmosDB
             }
             catch (DocumentClientException dce)
             {
-                if (Equals(NOT_FOUND_CODE, dce?.Error?.Code))
+                if (dce.StatusCode == HttpStatusCode.NotFound)
                 {
                     insertStoredProc = true;
                 }

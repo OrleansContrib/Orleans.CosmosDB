@@ -36,8 +36,9 @@ namespace Orleans.CosmosDB.Tests
                 ClusterId = this.clusterId,
                 CanCreateResources = true,
                 AutoUpdateStoredProcedures = true,
-                DropDatabaseOnInit = true
-                //ConnectionProtocol = Microsoft.Azure.Documents.Client.Protocol.Https,
+                DropDatabaseOnInit = true,
+                ConnectionMode = Microsoft.Azure.Documents.Client.ConnectionMode.Gateway,
+                DB = "OrleansMBRTest"
 
             };
             return new CosmosDBMembershipTable(loggerFactory, Options.Create(options));
@@ -50,6 +51,8 @@ namespace Orleans.CosmosDB.Tests
                 AccountEndpoint = "https://localhost:8081",
                 AccountKey = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
                 ClusterId = this.clusterId,
+                ConnectionMode = Microsoft.Azure.Documents.Client.ConnectionMode.Gateway,
+                DB = "OrleansMBRTest"
             };
             return new CosmosDBGatewayListProvider(loggerFactory, Options.Create(options), this.clientConfiguration);
         }
