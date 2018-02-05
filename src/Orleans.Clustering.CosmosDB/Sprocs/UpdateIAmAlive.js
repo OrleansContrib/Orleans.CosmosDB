@@ -3,13 +3,13 @@ function UpdateIAmAlive(siloEntityId, iAmAliveTime) {
   var collection = context.getCollection();
   var response = context.getResponse();
 
-  var entityExistQuery = 'SELECT * FROM c WHERE c.id = "' + siloEntity.id + '"';
+  var entityExistQuery = 'SELECT * FROM c WHERE c.id = "' + siloEntityId + '"';
   var existAccepted = collection.queryDocuments(collection.getSelfLink(), entityExistQuery, {},
     function (err, found) {
       if (!existAccepted) throw new Error('Unable to query for SiloEntity');
 
       if (found.length > 0) {
-        var siloFound = found.find(f => f.id === siloEntity.id);
+        var siloFound = found.find(f => f.id === siloEntityId);
         siloFound.IAmAliveTime = iAmAliveTime;
 
         var updateIAmAliveRequestAccepted = collection.replaceDocument(siloFound._self, siloFound,

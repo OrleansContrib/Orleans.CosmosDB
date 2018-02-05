@@ -18,8 +18,8 @@ namespace Orleans.CosmosDB.Tests
             protected override ISiloHostBuilder PreBuild(ISiloHostBuilder builder)
             {
                 var siloConfig = ClusterConfiguration.LocalhostPrimarySilo();
-                siloConfig.Globals.ReminderServiceType = GlobalConfiguration.ReminderServiceProviderType.Custom;
-                siloConfig.Globals.ReminderTableAssembly = "Orleans.Reminders.CosmosDB";
+                //siloConfig.Globals.ReminderServiceType = GlobalConfiguration.ReminderServiceProviderType.Custom;
+                //siloConfig.Globals.ReminderTableAssembly = "Orleans.Reminders.CosmosDB";
                 siloConfig.AddAzureCosmosDBReminders();
                 siloConfig.AddAzureCosmosDBPersistence(TEST_STORAGE);
                 return builder.UseConfiguration(siloConfig)
@@ -28,17 +28,18 @@ namespace Orleans.CosmosDB.Tests
                         opt.AccountEndpoint = ACC_ENDPOINT;
                         opt.AccountKey = ACC_KEY;
                         opt.ConnectionMode = Microsoft.Azure.Documents.Client.ConnectionMode.Gateway;
-                        opt.ConnectionProtocol = Microsoft.Azure.Documents.Client.Protocol.Https;
                         opt.AutoUpdateStoredProcedures = true;
+                        opt.DB = "OrleansRemindersTest";
                     })
                     .UseAzureCosmosDBReminders(opt =>
                     {
                         opt.AccountEndpoint = ACC_ENDPOINT;
                         opt.AccountKey = ACC_KEY;
                         opt.ConnectionMode = Microsoft.Azure.Documents.Client.ConnectionMode.Gateway;
-                        opt.ConnectionProtocol = Microsoft.Azure.Documents.Client.Protocol.Https;
                         opt.DropDatabaseOnInit = true;
+                        opt.CanCreateResources = true;
                         opt.AutoUpdateStoredProcedures = true;
+                        opt.DB = "OrleansRemindersTest";
                     });
             }
         }

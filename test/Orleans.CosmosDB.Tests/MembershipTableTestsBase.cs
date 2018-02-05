@@ -54,7 +54,7 @@ namespace Orleans.CosmosDB.Tests
             var adoVariant = GetAdoInvariant();
 
             membershipTable = CreateMembershipTable(logger);
-            membershipTable.InitializeMembershipTable(true).WithTimeout(TimeSpan.FromMinutes(1)).Wait();
+            membershipTable.InitializeMembershipTable(true).WithTimeout(TimeSpan.FromMinutes(3)).Wait();
 
             clientConfiguration = new ClientConfiguration
             {
@@ -64,7 +64,7 @@ namespace Orleans.CosmosDB.Tests
             };
 
             gatewayListProvider = CreateGatewayListProvider(logger);
-            gatewayListProvider.InitializeGatewayListProvider().WithTimeout(TimeSpan.FromMinutes(1)).Wait();
+            gatewayListProvider.InitializeGatewayListProvider().WithTimeout(TimeSpan.FromMinutes(3)).Wait();
         }
 
         //public IGrainFactory GrainFactory => this.environment.GrainFactory;

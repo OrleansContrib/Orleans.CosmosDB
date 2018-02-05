@@ -1,4 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Reflection;
 using System.Threading.Tasks;
 using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
@@ -8,7 +13,6 @@ using Microsoft.Extensions.Options;
 using Newtonsoft.Json.Linq;
 using Orleans.Persistence.CosmosDB.Models;
 using Orleans.Persistence.CosmosDB.Options;
-using Orleans.Persistence.CosmosDB.Properties;
 using Orleans.Providers;
 using Orleans.Runtime;
 using Orleans.Storage;
@@ -18,11 +22,12 @@ namespace Orleans.Persistence.CosmosDB
     public class CosmosDBPersistenceProvider : IStorageProvider
     {
         private const string PARTITION_KEY = "/GrainType";
-        private const string NOT_FOUND_CODE = "NotFound";
 
         private const string WRITE_STATE_SPROC = "WriteState";
         private const string READ_STATE_SPROC = "ReadState";
         private const string CLEAR_STATE_SPROC = "ClearState";
+
+        private readonly Dictionary<string, string> _sprocFiles;
 
         private ILoggerFactory _loggerFactory;
         private ILogger _logger;
@@ -32,6 +37,16 @@ namespace Orleans.Persistence.CosmosDB
 
         public Logger Log { get; private set; }
         public string Name { get; private set; }
+
+        public CosmosDBPersistenceProvider()
+        {
+            this._sprocFiles = new Dictionary<string, string>
+            {
+                { WRITE_STATE_SPROC, $"{WRITE_STATE_SPROC}.js" },
+                { READ_STATE_SPROC, $"{READ_STATE_SPROC}.js" },
+                { CLEAR_STATE_SPROC, $"{CLEAR_STATE_SPROC}.js" }
+            };
+        }
 
         public async Task Init(string name, IProviderRuntime providerRuntime, IProviderConfiguration config)
         {
@@ -54,7 +69,7 @@ namespace Orleans.Persistence.CosmosDB
             {
                 if (this._options.DropDatabaseOnInit)
                 {
-                    await this._dbClient.DeleteDatabaseAsync(UriFactory.CreateDatabaseUri(this._options.DB));
+                    await TryDeleteDatabase();
                 }
 
                 await TryCreateCosmosDBResources();
@@ -73,7 +88,7 @@ namespace Orleans.Persistence.CosmosDB
             try
             {
                 var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<GrainStateEntity>(
-                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, "ReadState"),
+                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, READ_STATE_SPROC),
                         new RequestOptions { PartitionKey = new PartitionKey(grainType) },
                         grainType, id)).ConfigureAwait(false);
 
@@ -90,9 +105,10 @@ namespace Orleans.Persistence.CosmosDB
             }
             catch (DocumentClientException dce)
             {
-                if (NOT_FOUND_CODE.Equals(dce?.Error?.Code))
+                if (dce.StatusCode == HttpStatusCode.NotFound)
                 {
-                    // State is new, just return
+                    // State is new, just activate a default and return
+                    grainState.State = Activator.CreateInstance(grainState.State.GetType());
                     return;
                 }
 
@@ -121,7 +137,7 @@ namespace Orleans.Persistence.CosmosDB
                 };
 
                 var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<string>(
-                       UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, "WriteState"),
+                       UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, WRITE_STATE_SPROC),
                        new RequestOptions { PartitionKey = new PartitionKey(grainType) },
                        entity)).ConfigureAwait(false);
 
@@ -141,7 +157,7 @@ namespace Orleans.Persistence.CosmosDB
             try
             {
                 var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<string>(
-                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, "ClearState"),
+                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, CLEAR_STATE_SPROC),
                         new RequestOptions { PartitionKey = new PartitionKey(grainType) },
                         grainType, id, grainState.ETag, this._options.DeleteOnClear)).ConfigureAwait(false);
 
@@ -205,16 +221,28 @@ namespace Orleans.Persistence.CosmosDB
         {
             await this._dbClient.CreateDatabaseIfNotExistsAsync(new Database { Id = this._options.DB });
 
-            var clusterCollection = new DocumentCollection
+            var stateCollection = new DocumentCollection
             {
                 Id = this._options.Collection
             };
-            clusterCollection.PartitionKey.Paths.Add(PARTITION_KEY);
-            // TODO: Set indexing policy to the collection
+            stateCollection.PartitionKey.Paths.Add(PARTITION_KEY);
+
+            stateCollection.IndexingPolicy.IndexingMode = IndexingMode.Consistent;
+            stateCollection.IndexingPolicy.IncludedPaths.Add(new IncludedPath { Path = "/*" });
+            stateCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/\"State\"/*" });
+
+            if (this._options.StateFieldsToIndex != null)
+            {
+                foreach (var idx in this._options.StateFieldsToIndex)
+                {
+                    var path = idx.StartsWith("/") ? $"/State{idx}" : $"/State/{idx}";
+                    stateCollection.IndexingPolicy.IncludedPaths.Add(new IncludedPath { Path = path });
+                }
+            }
 
             await this._dbClient.CreateDocumentCollectionIfNotExistsAsync(
                 UriFactory.CreateDatabaseUri(this._options.DB),
-                clusterCollection,
+                stateCollection,
                 new RequestOptions
                 {
                     PartitionKey = new PartitionKey(PARTITION_KEY),
@@ -224,11 +252,39 @@ namespace Orleans.Persistence.CosmosDB
                 });
         }
 
+        private async Task TryDeleteDatabase()
+        {
+            try
+            {
+                var dbUri = UriFactory.CreateDatabaseUri(this._options.DB);
+                await this._dbClient.ReadDatabaseAsync(dbUri);
+                await this._dbClient.DeleteDatabaseAsync(dbUri);
+            }
+            catch (DocumentClientException dce)
+            {
+                if (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    return;
+                }
+                else
+                {
+                    throw;
+                }
+            }
+        }
+
         private async Task UpdateStoredProcedures()
         {
-            await this.UpdateStoredProcedure(READ_STATE_SPROC, Resources.ReadState);
-            await this.UpdateStoredProcedure(WRITE_STATE_SPROC, Resources.WriteState);
-            await this.UpdateStoredProcedure(CLEAR_STATE_SPROC, Resources.ClearState);
+            var assembly = Assembly.GetExecutingAssembly();
+            foreach (var sproc in this._sprocFiles.Keys)
+            {
+                using (var fileStream = assembly.GetManifestResourceStream($"Orleans.Persistence.CosmosDB.Sprocs.{this._sprocFiles[sproc]}"))
+                using (var reader = new StreamReader(fileStream))
+                {
+                    var content = await reader.ReadToEndAsync();
+                    await UpdateStoredProcedure(sproc, content);
+                }
+            }
         }
 
         private async Task UpdateStoredProcedure(string name, string content)
@@ -250,7 +306,7 @@ namespace Orleans.Persistence.CosmosDB
             }
             catch (DocumentClientException dce)
             {
-                if (Equals(NOT_FOUND_CODE, dce?.Error?.Code))
+                if (dce.StatusCode == HttpStatusCode.NotFound)
                 {
                     insertStoredProc = true;
                 }
