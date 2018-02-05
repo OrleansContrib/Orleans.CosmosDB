@@ -221,16 +221,28 @@ namespace Orleans.Persistence.CosmosDB
         {
             await this._dbClient.CreateDatabaseIfNotExistsAsync(new Database { Id = this._options.DB });
 
-            var clusterCollection = new DocumentCollection
+            var stateCollection = new DocumentCollection
             {
                 Id = this._options.Collection
             };
-            clusterCollection.PartitionKey.Paths.Add(PARTITION_KEY);
-            // TODO: Set indexing policy to the collection
+            stateCollection.PartitionKey.Paths.Add(PARTITION_KEY);
+
+            stateCollection.IndexingPolicy.IndexingMode = IndexingMode.Consistent;
+            stateCollection.IndexingPolicy.IncludedPaths.Add(new IncludedPath { Path = "/*" });
+            stateCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/\"State\"/*" });
+
+            if (this._options.StateFieldsToIndex != null)
+            {
+                foreach (var idx in this._options.StateFieldsToIndex)
+                {
+                    var path = idx.StartsWith("/") ? $"/State{idx}" : $"/State/{idx}";
+                    stateCollection.IndexingPolicy.IncludedPaths.Add(new IncludedPath { Path = path });
+                }
+            }
 
             await this._dbClient.CreateDocumentCollectionIfNotExistsAsync(
                 UriFactory.CreateDatabaseUri(this._options.DB),
-                clusterCollection,
+                stateCollection,
                 new RequestOptions
                 {
                     PartitionKey = new PartitionKey(PARTITION_KEY),
@@ -248,9 +260,9 @@ namespace Orleans.Persistence.CosmosDB
                 await this._dbClient.ReadDatabaseAsync(dbUri);
                 await this._dbClient.DeleteDatabaseAsync(dbUri);
             }
-            catch(DocumentClientException dce)
+            catch (DocumentClientException dce)
             {
-                if(dce.StatusCode == System.Net.HttpStatusCode.NotFound)
+                if (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
                 {
                     return;
                 }

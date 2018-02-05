@@ -1,6 +1,7 @@
 using Microsoft.Azure.Documents.Client;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using System.Collections.Generic;
 
 namespace Orleans.Persistence.CosmosDB.Options
 {
@@ -38,6 +39,14 @@ namespace Orleans.Persistence.CosmosDB.Options
 
         [JsonProperty(nameof(DeleteOnClear))]
         public bool DeleteOnClear { get; set; }
+
+        /// <summary>
+        /// List of JSON path strings.
+        /// Each entry on this list represents a property in the State Object that will be included in the document index.
+        /// The default is to not add any property in the State object.
+        /// </summary>
+        [JsonProperty(nameof(StateFieldsToIndex))]
+        public List<string> StateFieldsToIndex { get; set; } = new List<string>();
 
         /// <summary>
         /// Automatically add/update stored procudures on initialization.  This may result in slight downtime due to stored procedures having to be deleted and recreated in partitioned environments.

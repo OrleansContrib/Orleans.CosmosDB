@@ -275,16 +275,19 @@ namespace Orleans.Reminders.CosmosDB
         {
             await this._dbClient.CreateDatabaseIfNotExistsAsync(new Database { Id = this._options.DB });
 
-            var clusterCollection = new DocumentCollection
+            var remindersCollection = new DocumentCollection
             {
                 Id = this._options.Collection
             };
 
-            // TODO: Set indexing policy to the collection
+            remindersCollection.IndexingPolicy.IndexingMode = IndexingMode.Consistent;
+            remindersCollection.IndexingPolicy.IncludedPaths.Add(new IncludedPath { Path = "/*" });
+            remindersCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/StartAt/*" });
+            remindersCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/Period/*" });
 
             await this._dbClient.CreateDocumentCollectionIfNotExistsAsync(
                 UriFactory.CreateDatabaseUri(this._options.DB),
-                clusterCollection,
+                remindersCollection,
                 new RequestOptions
                 {
                     //TODO: Check the consistency level for the emulator

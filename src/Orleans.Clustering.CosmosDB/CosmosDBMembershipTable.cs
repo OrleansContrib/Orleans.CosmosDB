@@ -388,7 +388,18 @@ namespace Orleans.Clustering.CosmosDB
                 Id = this._options.Collection
             };
             clusterCollection.PartitionKey.Paths.Add(PARTITION_KEY);
-            // TODO: Set indexing policy to the collection
+
+            clusterCollection.IndexingPolicy.IndexingMode = IndexingMode.Consistent;
+            clusterCollection.IndexingPolicy.IncludedPaths.Add(new IncludedPath { Path = "/*" });
+            clusterCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/Address/*" });
+            clusterCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/Port/*" });
+            clusterCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/Generation/*" });
+            clusterCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/Hostname/*" });
+            clusterCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/SiloName/*" });
+            clusterCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/\"SuspectingSilos\"/*" });
+            clusterCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/\"SuspectingTimes\"/*" });
+            clusterCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/StartTime/*" });
+            clusterCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/IAmAliveTime/*" });
 
             await this._dbClient.CreateDocumentCollectionIfNotExistsAsync(
                 UriFactory.CreateDatabaseUri(this._options.DB),
@@ -397,7 +408,7 @@ namespace Orleans.Clustering.CosmosDB
                 {
                     PartitionKey = new PartitionKey(PARTITION_KEY),
                     //TODO: Check the consistency level for the emulator
-                    //ConsistencyLevel = ConsistencyLevel.Strong,
+                    ConsistencyLevel = this._options.AccountEndpoint.Contains("localhost") ? ConsistencyLevel.Session : ConsistencyLevel.Strong,
                     OfferThroughput = this._options.CollectionThroughput
                 });
         }
