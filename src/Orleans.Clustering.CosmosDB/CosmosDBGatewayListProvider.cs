@@ -21,6 +21,7 @@ namespace Orleans.Clustering.CosmosDB
         private readonly AzureCosmosDBGatewayOptions _options;
         private readonly ILoggerFactory _loggerFactory;
         private readonly TimeSpan _maxStaleness;
+        private readonly string _clusterId;
         private DocumentClient _dbClient;
 
         public TimeSpan MaxStaleness => this._maxStaleness;
@@ -29,6 +30,7 @@ namespace Orleans.Clustering.CosmosDB
 
         public CosmosDBGatewayListProvider(ILoggerFactory loggerFactory, IOptions<AzureCosmosDBGatewayOptions> options, ClientConfiguration clientConfiguration)
         {
+            this._clusterId = clientConfiguration.ClusterId;
             this._maxStaleness = clientConfiguration.GatewayListRefreshPeriod;
             this._loggerFactory = loggerFactory;
             this._options = options.Value;
@@ -40,8 +42,8 @@ namespace Orleans.Clustering.CosmosDB
             {
                 var spResponse = await this._dbClient.ExecuteStoredProcedureAsync<List<SiloEntity>>(
                     UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, SPROC),
-                    new RequestOptions { PartitionKey = new PartitionKey(this._options.ClusterId) },
-                    this._options.ClusterId);
+                    new RequestOptions { PartitionKey = new PartitionKey(this._clusterId) },
+                    this._clusterId);
 
                 var uris = spResponse.Response.Select(ConvertToGatewayUri).ToList();
                 return uris;

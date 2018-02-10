@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using Orleans.Clustering.CosmosDB;
 using Orleans.Clustering.CosmosDB.Options;
 using Orleans.Messaging;
+using Orleans.Runtime;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -33,7 +34,6 @@ namespace Orleans.CosmosDB.Tests
             {
                 AccountEndpoint = "https://localhost:8081",
                 AccountKey = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
-                ClusterId = this.clusterId,
                 CanCreateResources = true,
                 AutoUpdateStoredProcedures = true,
                 DropDatabaseOnInit = true,
@@ -41,7 +41,7 @@ namespace Orleans.CosmosDB.Tests
                 DB = "OrleansMBRTest"
 
             };
-            return new CosmosDBMembershipTable(loggerFactory, Options.Create(options));
+            return new CosmosDBMembershipTable(loggerFactory, Options.Create(new SiloOptions { ClusterId = this.clusterId }), Options.Create(options));
         }
 
         protected override IGatewayListProvider CreateGatewayListProvider(ILogger logger)
@@ -50,7 +50,6 @@ namespace Orleans.CosmosDB.Tests
             {
                 AccountEndpoint = "https://localhost:8081",
                 AccountKey = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
-                ClusterId = this.clusterId,
                 ConnectionMode = Microsoft.Azure.Documents.Client.ConnectionMode.Gateway,
                 DB = "OrleansMBRTest"
             };
