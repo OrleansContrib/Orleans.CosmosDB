@@ -1,8 +1,6 @@
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Orleans.Messaging;
 using Orleans.Runtime;
-using Orleans.Runtime.Configuration;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -33,10 +31,7 @@ namespace Orleans.CosmosDB.Tests
         private readonly IGatewayListProvider gatewayListProvider;
         protected readonly string clusterId;
         protected ILoggerFactory loggerFactory;
-        protected IOptions<SiloOptions> siloOptions;
-        protected IOptions<ClusterClientOptions> clientOptions;
         protected const string testDatabaseName = "OrleansMembershipTest";//for relational storage
-        protected readonly ClientConfiguration clientConfiguration;
         protected MembershipTableTestsBase(/*ConnectionStringFixture fixture, TestEnvironmentFixture environment, */LoggerFilterOptions filters)
         {
             //this.environment = environment;
@@ -49,19 +44,10 @@ namespace Orleans.CosmosDB.Tests
 
             //fixture.InitializeConnectionStringAccessor(GetConnectionString);
             //this.connectionString = fixture.ConnectionString;
-            this.siloOptions = Options.Create(new SiloOptions { ClusterId = this.clusterId });
-            this.clientOptions = Options.Create(new ClusterClientOptions { ClusterId = this.clusterId });
             var adoVariant = GetAdoInvariant();
 
             membershipTable = CreateMembershipTable(logger);
             membershipTable.InitializeMembershipTable(true).WithTimeout(TimeSpan.FromMinutes(3)).Wait();
-
-            clientConfiguration = new ClientConfiguration
-            {
-                ClusterId = this.clusterId,
-                AdoInvariant = adoVariant,
-                //DataConnectionString = fixture.ConnectionString
-            };
 
             gatewayListProvider = CreateGatewayListProvider(logger);
             gatewayListProvider.InitializeGatewayListProvider().WithTimeout(TimeSpan.FromMinutes(3)).Wait();

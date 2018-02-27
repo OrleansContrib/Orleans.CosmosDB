@@ -1,9 +1,8 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orleans.Clustering.CosmosDB;
-using Orleans.Clustering.CosmosDB.Options;
+using Orleans.Configuration;
 using Orleans.Messaging;
-using Orleans.Runtime;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -30,7 +29,7 @@ namespace Orleans.CosmosDB.Tests
         protected override IMembershipTable CreateMembershipTable(ILogger logger)
         {
             //TestUtils.CheckForAzureStorage();
-            var options = new AzureCosmosDBClusteringOptions()
+            var options = new CosmosDBClusteringOptions()
             {
                 AccountEndpoint = "https://localhost:8081",
                 AccountKey = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
@@ -41,19 +40,22 @@ namespace Orleans.CosmosDB.Tests
                 DB = "OrleansMBRTest"
 
             };
-            return new CosmosDBMembershipTable(loggerFactory, Options.Create(new SiloOptions { ClusterId = this.clusterId }), Options.Create(options));
+            return new CosmosDBMembershipTable(loggerFactory, Options.Create(new ClusterOptions { ClusterId = this.clusterId }), Options.Create(options));
         }
 
         protected override IGatewayListProvider CreateGatewayListProvider(ILogger logger)
         {
-            var options = new AzureCosmosDBGatewayOptions()
+            var options = new CosmosDBGatewayOptions()
             {
                 AccountEndpoint = "https://localhost:8081",
                 AccountKey = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
                 ConnectionMode = Microsoft.Azure.Documents.Client.ConnectionMode.Gateway,
                 DB = "OrleansMBRTest"
             };
-            return new CosmosDBGatewayListProvider(loggerFactory, Options.Create(options), this.clientConfiguration);
+            return new CosmosDBGatewayListProvider(loggerFactory,
+                Options.Create(options),
+                Options.Create(new ClusterOptions { ClusterId = this.clusterId }),
+                Options.Create(new GatewayOptions()));
         }
 
         protected override Task<string> GetConnectionString()
@@ -63,37 +65,37 @@ namespace Orleans.CosmosDB.Tests
         }
 
         [Fact]
-        public async Task MembershipTable_Azure_GetGateways()
+        public async Task GetGateways()
         {
             await MembershipTable_GetGateways();
         }
 
         [Fact]
-        public async Task MembershipTable_Azure_ReadAll_EmptyTable()
+        public async Task ReadAll_EmptyTable()
         {
             await MembershipTable_ReadAll_EmptyTable();
         }
 
         [Fact]
-        public async Task MembershipTable_Azure_InsertRow()
+        public async Task InsertRow()
         {
             await MembershipTable_InsertRow();
         }
 
         [Fact]
-        public async Task MembershipTable_Azure_ReadRow_Insert_Read()
+        public async Task ReadRow_Insert_Read()
         {
             await MembershipTable_ReadRow_Insert_Read();
         }
 
         [Fact]
-        public async Task MembershipTable_Azure_ReadAll_Insert_ReadAll()
+        public async Task ReadAll_Insert_ReadAll()
         {
             await MembershipTable_ReadAll_Insert_ReadAll();
         }
 
         [Fact]
-        public async Task MembershipTable_Azure_UpdateRow()
+        public async Task UpdateRow()
         {
             await MembershipTable_UpdateRow();
         }
@@ -101,13 +103,13 @@ namespace Orleans.CosmosDB.Tests
         // TODO: Enable this after implement retry police
         // See https://blogs.msdn.microsoft.com/bigdatasupport/2015/09/02/dealing-with-requestratetoolarge-errors-in-azure-documentdb-and-testing-performance/ 
         //[Fact]
-        //public async Task MembershipTable_Azure_UpdateRowInParallel()
+        //public async Task UpdateRowInParallel()
         //{
         //    await MembershipTable_UpdateRowInParallel();
         //}
 
         [Fact]
-        public async Task MembershipTable_Azure_UpdateIAmAlive()
+        public async Task UpdateIAmAlive()
         {
             await MembershipTable_UpdateIAmAlive();
         }
