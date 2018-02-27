@@ -3,10 +3,9 @@ using Microsoft.Azure.Documents.Client;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orleans.Clustering.CosmosDB.Models;
-using Orleans.Clustering.CosmosDB.Options;
+using Orleans.Configuration;
 using Orleans.Messaging;
 using Orleans.Runtime;
-using Orleans.Runtime.Configuration;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,7 +17,7 @@ namespace Orleans.Clustering.CosmosDB
     internal class CosmosDBGatewayListProvider : IGatewayListProvider
     {
         private const string SPROC = "GetAliveGateways";
-        private readonly AzureCosmosDBGatewayOptions _options;
+        private readonly CosmosDBGatewayOptions _options;
         private readonly ILoggerFactory _loggerFactory;
         private readonly TimeSpan _maxStaleness;
         private readonly string _clusterId;
@@ -28,10 +27,11 @@ namespace Orleans.Clustering.CosmosDB
 
         public bool IsUpdatable => true;
 
-        public CosmosDBGatewayListProvider(ILoggerFactory loggerFactory, IOptions<AzureCosmosDBGatewayOptions> options, ClientConfiguration clientConfiguration)
+        public CosmosDBGatewayListProvider(ILoggerFactory loggerFactory, IOptions<CosmosDBGatewayOptions> options,
+            IOptions<ClusterOptions> clusterOptions, IOptions<GatewayOptions> gatewayOptions)
         {
-            this._clusterId = clientConfiguration.ClusterId;
-            this._maxStaleness = clientConfiguration.GatewayListRefreshPeriod;
+            this._clusterId = clusterOptions.Value.ClusterId;
+            this._maxStaleness = gatewayOptions.Value.GatewayListRefreshPeriod;
             this._loggerFactory = loggerFactory;
             this._options = options.Value;
         }

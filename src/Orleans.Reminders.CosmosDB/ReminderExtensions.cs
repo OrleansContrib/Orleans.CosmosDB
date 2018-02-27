@@ -1,21 +1,49 @@
+using Microsoft.Extensions.DependencyInjection;
+using Orleans.Configuration;
 using Orleans.Hosting;
-using Orleans.Reminders.CosmosDB.Options;
-using Orleans.Runtime.Configuration;
+using Orleans.Reminders.CosmosDB;
 using System;
 
-namespace Orleans
+namespace Orleans.Hosting
 {
     public static class ReminderExtensions
     {
-        public static ISiloHostBuilder UseAzureCosmosDBReminders(this ISiloHostBuilder builder, Action<AzureCosmosDBReminderProviderOptions> options)
+        /// <summary>
+        /// Adds reminder storage backed by Azure CosmosDB.
+        /// </summary>
+        /// <param name="builder">
+        /// The builder.
+        /// </param>
+        /// <param name="configure">
+        /// The delegate used to configure the reminder store.
+        /// </param>
+        /// <returns>
+        /// The provided <see cref="ISiloHostBuilder"/>, for chaining.
+        /// </returns>
+        public static ISiloHostBuilder UseCosmosDBReminderService(this ISiloHostBuilder builder, Action<CosmosDBReminderStorageOptions> configure)
         {
-            return builder.Configure(options);
+            builder.ConfigureServices(services => services.UseCosmosDBReminderService(configure));
+            return builder;
         }
 
-        public static void AddAzureCosmosDBReminders(this ClusterConfiguration config)
+        /// <summary>
+        /// Adds reminder storage backed by Azure CosmosDB.
+        /// </summary>
+        /// <param name="services">
+        /// The service collection.
+        /// </param>
+        /// <param name="configure">
+        /// The delegate used to configure the reminder store.
+        /// </param>
+        /// <returns>
+        /// The provided <see cref="IServiceCollection"/>, for chaining.
+        /// </returns>
+        public static IServiceCollection UseCosmosDBReminderService(this IServiceCollection services, Action<CosmosDBReminderStorageOptions> configure)
         {
-            config.Globals.ReminderServiceType = GlobalConfiguration.ReminderServiceProviderType.Custom;
-            config.Globals.ReminderTableAssembly = "Orleans.Reminders.CosmosDB";
+            services.AddSingleton<IReminderTable, CosmosDBReminderTable>();
+            services.Configure(configure);
+            services.ConfigureFormatter<CosmosDBReminderStorageOptions>();
+            return services;
         }
     }
 }

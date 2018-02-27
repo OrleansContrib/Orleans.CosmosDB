@@ -3,7 +3,7 @@ using Microsoft.Azure.Documents.Client;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orleans.Clustering.CosmosDB.Models;
-using Orleans.Clustering.CosmosDB.Options;
+using Orleans.Configuration;
 using Orleans.Runtime;
 using System;
 using System.Collections.Generic;
@@ -30,14 +30,14 @@ namespace Orleans.Clustering.CosmosDB
         private readonly Dictionary<string, string> _sprocFiles;
         private readonly ILoggerFactory _loggerFactory;
         private readonly ILogger _logger;
-        private readonly AzureCosmosDBClusteringOptions _options;
-        private readonly SiloOptions _siloOptions;
+        private readonly CosmosDBClusteringOptions _options;
+        private readonly ClusterOptions _clusterOptions;
 
         private DocumentClient _dbClient;
 
-        public CosmosDBMembershipTable(ILoggerFactory loggerFactory, IOptions<SiloOptions> siloOptions, IOptions<AzureCosmosDBClusteringOptions> clusteringOptions)
+        public CosmosDBMembershipTable(ILoggerFactory loggerFactory, IOptions<ClusterOptions> clusterOptions, IOptions<CosmosDBClusteringOptions> clusteringOptions)
         {
-            this._siloOptions = siloOptions.Value;
+            this._clusterOptions = clusterOptions.Value;
             this._loggerFactory = loggerFactory;
             this._logger = loggerFactory?.CreateLogger<CosmosDBMembershipTable>();
             this._options = clusteringOptions.Value;
@@ -81,14 +81,14 @@ namespace Orleans.Clustering.CosmosDB
 
             var versionEntity = (await this._dbClient.Query<ClusterVersionEntity>(
                 this._options.DB, this._options.Collection, t =>
-                    t.ClusterId == this._siloOptions.ClusterId &&
+                    t.ClusterId == this._clusterOptions.ClusterId &&
                     t.EntityType == nameof(ClusterVersionEntity))).SingleOrDefault();
 
             if (versionEntity == null)
             {
                 versionEntity = new ClusterVersionEntity
                 {
-                    ClusterId = this._siloOptions.ClusterId,
+                    ClusterId = this._clusterOptions.ClusterId,
                     ClusterVersion = 0,
                     Id = CLUSTER_VERSION_ID
                 };
@@ -112,8 +112,8 @@ namespace Orleans.Clustering.CosmosDB
             {
                 var spResponse = await this._dbClient.ExecuteStoredProcedureAsync<ReadResponse>(
                     UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, READ_ALL_SPROC),
-                    new RequestOptions { PartitionKey = new PartitionKey(this._siloOptions.ClusterId) },
-                    this._siloOptions.ClusterId);
+                    new RequestOptions { PartitionKey = new PartitionKey(this._clusterOptions.ClusterId) },
+                    this._clusterOptions.ClusterId);
 
                 ClusterVersionEntity versionEntity = spResponse.Response.ClusterVersion;
                 List<SiloEntity> entryEntities = spResponse.Response.Silos;
@@ -138,7 +138,7 @@ namespace Orleans.Clustering.CosmosDB
                     }
                     catch (Exception exc)
                     {
-                        //TODO: Log it
+                        this._logger.LogError(exc, "Failure reading all membership records.");
                         throw;
                     }
                 }
@@ -148,7 +148,7 @@ namespace Orleans.Clustering.CosmosDB
             }
             catch (Exception exc)
             {
-                this._logger.LogWarning($"Failure reading all silo entries for cluster id {this._siloOptions.ClusterId}: {exc}");
+                this._logger.LogWarning($"Failure reading all silo entries for cluster id {this._clusterOptions.ClusterId}: {exc}");
                 throw;
             }
         }
@@ -165,12 +165,12 @@ namespace Orleans.Clustering.CosmosDB
         {
             try
             {
-                var siloEntity = ConvertToEntity(entry, this._siloOptions.ClusterId);
+                var siloEntity = ConvertToEntity(entry, this._clusterOptions.ClusterId);
                 var versionEntity = BuildVersionEntity(tableVersion);
 
                 var spResponse = await this._dbClient.ExecuteStoredProcedureAsync<bool>(
                         UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, INSERT_SILO_SPROC),
-                        new RequestOptions { PartitionKey = new PartitionKey(this._siloOptions.ClusterId) },
+                        new RequestOptions { PartitionKey = new PartitionKey(this._clusterOptions.ClusterId) },
                         siloEntity, versionEntity);
 
                 return spResponse.Response;
@@ -190,8 +190,8 @@ namespace Orleans.Clustering.CosmosDB
             {
                 var spResponse = await this._dbClient.ExecuteStoredProcedureAsync<ReadResponse>(
                     UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, READ_SILO_SPROC),
-                    new RequestOptions { PartitionKey = new PartitionKey(this._siloOptions.ClusterId) },
-                    this._siloOptions.ClusterId, id);
+                    new RequestOptions { PartitionKey = new PartitionKey(this._clusterOptions.ClusterId) },
+                    this._clusterOptions.ClusterId, id);
 
                 ClusterVersionEntity versionEntity = spResponse.Response.ClusterVersion;
                 List<SiloEntity> entryEntities = spResponse.Response.Silos;
@@ -216,7 +216,7 @@ namespace Orleans.Clustering.CosmosDB
                     }
                     catch (Exception exc)
                     {
-                        //TODO: Log it
+                        this._logger.LogError(exc, "Failure reading membership row.");
                         throw;
                     }
                 }
@@ -226,7 +226,7 @@ namespace Orleans.Clustering.CosmosDB
             }
             catch (Exception exc)
             {
-                this._logger.LogWarning($"Failure reading silo entry {id} for cluster id {this._siloOptions.ClusterId}: {exc}");
+                this._logger.LogWarning($"Failure reading silo entry {id} for cluster id {this._clusterOptions.ClusterId}: {exc}");
                 throw;
             }
 
@@ -236,11 +236,11 @@ namespace Orleans.Clustering.CosmosDB
         {
             try
             {
-                var siloEntity = ConvertToEntity(entry, this._siloOptions.ClusterId);
+                var siloEntity = ConvertToEntity(entry, this._clusterOptions.ClusterId);
 
                 var spResponse = await this._dbClient.ExecuteStoredProcedureAsync<bool>(
                         UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, UPDATE_I_AM_ALIVE_SPROC),
-                        new RequestOptions { PartitionKey = new PartitionKey(this._siloOptions.ClusterId) },
+                        new RequestOptions { PartitionKey = new PartitionKey(this._clusterOptions.ClusterId) },
                         siloEntity.Id, siloEntity.IAmAliveTime);
 
                 if (!spResponse.Response) throw new InvalidOperationException("Unable to update IAmAlive");
@@ -255,14 +255,14 @@ namespace Orleans.Clustering.CosmosDB
         {
             try
             {
-                var siloEntity = ConvertToEntity(entry, this._siloOptions.ClusterId);
+                var siloEntity = ConvertToEntity(entry, this._clusterOptions.ClusterId);
                 siloEntity.ETag = etag;
 
                 var versionEntity = BuildVersionEntity(tableVersion);
 
                 var spResponse = await this._dbClient.ExecuteStoredProcedureAsync<bool>(
                         UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, UPDATE_SILO_SPROC),
-                        new RequestOptions { PartitionKey = new PartitionKey(this._siloOptions.ClusterId) },
+                        new RequestOptions { PartitionKey = new PartitionKey(this._clusterOptions.ClusterId) },
                         siloEntity, versionEntity);
 
                 return spResponse.Response;
@@ -353,7 +353,7 @@ namespace Orleans.Clustering.CosmosDB
         {
             return new ClusterVersionEntity
             {
-                ClusterId = this._siloOptions.ClusterId,
+                ClusterId = this._clusterOptions.ClusterId,
                 ClusterVersion = tableVersion.Version,
                 Id = CLUSTER_VERSION_ID,
                 ETag = tableVersion.VersionEtag

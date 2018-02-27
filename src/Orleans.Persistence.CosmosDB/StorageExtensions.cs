@@ -1,21 +1,86 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
+using Orleans.Configuration;
 using Orleans.Hosting;
 using Orleans.Persistence.CosmosDB;
-using Orleans.Persistence.CosmosDB.Options;
-using Orleans.Runtime.Configuration;
+using Orleans.Providers;
+using Orleans.Runtime;
+using Orleans.Storage;
 using System;
 
-namespace Orleans
+namespace Orleans.Hosting
 {
     public static class StorageExtensions
     {
-        public static ISiloHostBuilder UseAzureCosmosDBPersistence(this ISiloHostBuilder builder, Action<AzureCosmosDBPersistenceProviderOptions> options)
+        /// <summary>
+        /// Configure silo to use Azure CosmosDB storage as the default grain storage.
+        /// </summary>
+        public static ISiloHostBuilder AddCosmosDBGrainStorageAsDefault(this ISiloHostBuilder builder, Action<CosmosDBStorageOptions> configureOptions)
         {
-            return builder.Configure(options);
+            return builder.AddCosmosDBGrainStorage(ProviderConstants.DEFAULT_STORAGE_PROVIDER_NAME, configureOptions);
         }
 
-        public static void AddAzureCosmosDBPersistence(this ClusterConfiguration config, string name)
+        /// <summary>
+        /// Configure silo to use Azure CosmosDB storage for grain storage.
+        /// </summary>
+        public static ISiloHostBuilder AddCosmosDBGrainStorage(this ISiloHostBuilder builder, string name, Action<CosmosDBStorageOptions> configureOptions)
         {
-            config.Globals.RegisterStorageProvider<CosmosDBPersistenceProvider>(name);
+            return builder.ConfigureServices(services => services.AddCosmosDBGrainStorage(name, configureOptions));
+        }
+
+        /// <summary>
+        /// Configure silo to use Azure CosmosDB storage as the default grain storage.
+        /// </summary>
+        public static ISiloHostBuilder AddCosmosDBGrainStorageAsDefault(this ISiloHostBuilder builder, Action<OptionsBuilder<CosmosDBStorageOptions>> configureOptions = null)
+        {
+            return builder.AddCosmosDBGrainStorage(ProviderConstants.DEFAULT_STORAGE_PROVIDER_NAME, configureOptions);
+        }
+
+        /// <summary>
+        /// Configure silo to use Azure CosmosDB storage for grain storage.
+        /// </summary>
+        public static ISiloHostBuilder AddCosmosDBGrainStorage(this ISiloHostBuilder builder, string name, Action<OptionsBuilder<CosmosDBStorageOptions>> configureOptions = null)
+        {
+            return builder.ConfigureServices(services => services.AddCosmosDBGrainStorage(name, configureOptions));
+        }
+
+        /// <summary>
+        /// Configure silo to use Azure CosmosDB storage as the default grain storage.
+        /// </summary>
+        public static IServiceCollection AddCosmosDBGrainStorageAsDefault(this IServiceCollection services, Action<CosmosDBStorageOptions> configureOptions)
+        {
+            return services.AddCosmosDBGrainStorage(ProviderConstants.DEFAULT_STORAGE_PROVIDER_NAME, ob => ob.Configure(configureOptions));
+        }
+
+        /// <summary>
+        /// Configure silo to use Azure CosmosDB storage for grain storage.
+        /// </summary>
+        public static IServiceCollection AddCosmosDBGrainStorage(this IServiceCollection services, string name, Action<CosmosDBStorageOptions> configureOptions)
+        {
+            return services.AddCosmosDBGrainStorage(name, ob => ob.Configure(configureOptions));
+        }
+
+        /// <summary>
+        /// Configure silo to use Azure CosmosDB storage as the default grain storage.
+        /// </summary>
+        public static IServiceCollection AddCosmosDBGrainStorageAsDefault(this IServiceCollection services, Action<OptionsBuilder<CosmosDBStorageOptions>> configureOptions = null)
+        {
+            return services.AddCosmosDBGrainStorage(ProviderConstants.DEFAULT_STORAGE_PROVIDER_NAME, configureOptions);
+        }
+
+        /// <summary>
+        /// Configure silo to use Azure CosmosDB storage for grain storage.
+        /// </summary>
+        public static IServiceCollection AddCosmosDBGrainStorage(this IServiceCollection services, string name,
+            Action<OptionsBuilder<CosmosDBStorageOptions>> configureOptions = null)
+        {
+            configureOptions?.Invoke(services.AddOptions<CosmosDBStorageOptions>(name));
+            services.AddTransient<IConfigurationValidator>(sp => new CosmosDBStorageOptionsValidator(sp.GetService<IOptionsSnapshot<CosmosDBStorageOptions>>().Get(name), name));
+            services.ConfigureNamedOptionForLogging<CosmosDBStorageOptions>(name);
+            services.TryAddSingleton(sp => sp.GetServiceByName<IGrainStorage>(ProviderConstants.DEFAULT_STORAGE_PROVIDER_NAME));
+            return services.AddSingletonNamedService(name, CosmosDBGrainStorageFactory.Create)
+                           .AddSingletonNamedService(name, (s, n) => (ILifecycleParticipant<ISiloLifecycle>)s.GetRequiredServiceByName<IGrainStorage>(n));
         }
     }
 }

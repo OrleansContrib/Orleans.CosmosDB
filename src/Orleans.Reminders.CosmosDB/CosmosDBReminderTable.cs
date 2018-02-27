@@ -2,12 +2,12 @@ using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Orleans.Configuration;
 using Orleans.Reminders.CosmosDB.Models;
-using Orleans.Reminders.CosmosDB.Options;
 using Orleans.Runtime;
-using Orleans.Runtime.Configuration;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -29,21 +29,22 @@ namespace Orleans.Reminders.CosmosDB
         private readonly IGrainReferenceConverter _grainReferenceConverter;
         private readonly ILogger _logger;
         private readonly ILoggerFactory _loggerFactory;
-        private readonly SiloOptions _siloOptions;
-        private readonly AzureCosmosDBReminderProviderOptions _options;
+        private readonly CosmosDBReminderStorageOptions _options;
+        private readonly Guid _serviceId;
 
         private DocumentClient _dbClient;
 
-        public CosmosDBReminderTable(IGrainReferenceConverter grainReferenceConverter,
+        public CosmosDBReminderTable(
+            IGrainReferenceConverter grainReferenceConverter,
             ILoggerFactory loggerFactory,
-            IOptions<SiloOptions> siloOptions,
-            IOptions<AzureCosmosDBReminderProviderOptions> options)
+            IOptions<ClusterOptions> _clusterOptions,
+            IOptions<CosmosDBReminderStorageOptions> options)
         {
             this._loggerFactory = loggerFactory;
             this._logger = loggerFactory.CreateLogger(nameof(CosmosDBReminderTable));
-            this._siloOptions = siloOptions.Value;
             this._options = options.Value;
             this._grainReferenceConverter = grainReferenceConverter;
+            this._serviceId = _clusterOptions.Value.ServiceId;
 
             this._sprocFiles = new Dictionary<string, string>
             {
@@ -56,30 +57,50 @@ namespace Orleans.Reminders.CosmosDB
             };
         }
 
-        public async Task Init(GlobalConfiguration config)
+        public async Task Init()
         {
-            this._dbClient = new DocumentClient(new Uri(this._options.AccountEndpoint), this._options.AccountKey,
-                    new ConnectionPolicy
-                    {
-                        ConnectionMode = this._options.ConnectionMode,
-                        ConnectionProtocol = this._options.ConnectionProtocol
-                    });
+            var stopWatch = Stopwatch.StartNew();
 
-            await this._dbClient.OpenAsync();
-
-            if (this._options.CanCreateResources)
+            try
             {
-                if (this._options.DropDatabaseOnInit)
+                var initMsg = string.Format("Init: Name={0} ServiceId={1} Collection={2}",
+                        nameof(CosmosDBReminderTable), this._serviceId, this._options.Collection);
+
+                this._logger.LogInformation($"Azure Cosmos DB Reminder Storage {nameof(CosmosDBReminderTable)} is initializing: {initMsg}");
+
+                this._dbClient = new DocumentClient(new Uri(this._options.AccountEndpoint), this._options.AccountKey,
+                            new ConnectionPolicy
+                            {
+                                ConnectionMode = this._options.ConnectionMode,
+                                ConnectionProtocol = this._options.ConnectionProtocol
+                            });
+
+                await this._dbClient.OpenAsync();
+
+                if (this._options.CanCreateResources)
                 {
-                    await TryDeleteDatabase();
+                    if (this._options.DropDatabaseOnInit)
+                    {
+                        await TryDeleteDatabase();
+                    }
+
+                    await TryCreateCosmosDBResources();
+
+                    if (this._options.AutoUpdateStoredProcedures)
+                    {
+                        await UpdateStoredProcedures();
+                    }
                 }
 
-                await TryCreateCosmosDBResources();
-
-                if (this._options.AutoUpdateStoredProcedures)
-                {
-                    await UpdateStoredProcedures();
-                }
+                stopWatch.Stop();
+                this._logger.LogInformation(
+                    $"Initializing {nameof(CosmosDBReminderTable)} took {stopWatch.ElapsedMilliseconds} Milliseconds.");
+            }
+            catch (Exception exc)
+            {
+                stopWatch.Stop();
+                this._logger.LogError($"Initialization failed for provider {nameof(CosmosDBReminderTable)} in {stopWatch.ElapsedMilliseconds} Milliseconds.", exc);
+                throw;
             }
         }
 
@@ -89,7 +110,7 @@ namespace Orleans.Reminders.CosmosDB
             {
                 var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<ReminderEntity>(
                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, READ_ROW_SPROC),
-                       this._siloOptions.ServiceId, grainRef.ToKeyString(), reminderName)).ConfigureAwait(false);
+                       this._serviceId, grainRef.ToKeyString(), reminderName)).ConfigureAwait(false);
 
                 if (spResponse.Response == null) return null;
 
@@ -97,7 +118,7 @@ namespace Orleans.Reminders.CosmosDB
             }
             catch (Exception exc)
             {
-                this._logger.LogError(exc, $"Failure reading reminder {reminderName} for service {this._siloOptions.ServiceId} and grain {grainRef.ToKeyString()}.");
+                this._logger.LogError(exc, $"Failure reading reminder {reminderName} for service {this._serviceId} and grain {grainRef.ToKeyString()}.");
                 throw;
             }
         }
@@ -108,7 +129,7 @@ namespace Orleans.Reminders.CosmosDB
             {
                 var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<List<ReminderEntity>>(
                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, READ_ROWS_SPROC),
-                       this._siloOptions.ServiceId, key.ToKeyString())).ConfigureAwait(false);
+                       this._serviceId, key.ToKeyString())).ConfigureAwait(false);
 
                 return new ReminderTableData(spResponse.Response.Select(this.FromEntity));
             }
@@ -125,13 +146,13 @@ namespace Orleans.Reminders.CosmosDB
             {
                 var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<List<ReminderEntity>>(
                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, READ_RANGE_ROW_SPROC),
-                       this._siloOptions.ServiceId, begin, end)).ConfigureAwait(false);
+                       this._serviceId, begin, end)).ConfigureAwait(false);
 
                 return new ReminderTableData(spResponse.Response.Select(this.FromEntity));
             }
             catch (Exception exc)
             {
-                this._logger.LogError(exc, $"Failure reading reminders for Service {this._siloOptions.ServiceId} for range {begin} to {end}.");
+                this._logger.LogError(exc, $"Failure reading reminders for Service {this._serviceId} for range {begin} to {end}.");
                 throw;
             }
         }
@@ -142,13 +163,13 @@ namespace Orleans.Reminders.CosmosDB
             {
                 var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<bool>(
                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, DELETE_ROW_SPROC),
-                       this._siloOptions.ServiceId, grainRef.ToKeyString(), reminderName, eTag)).ConfigureAwait(false);
+                       this._serviceId, grainRef.ToKeyString(), reminderName, eTag)).ConfigureAwait(false);
 
                 return spResponse.Response;
             }
             catch (Exception exc)
             {
-                this._logger.LogError(exc, $"Failure removing reminders for Service {this._siloOptions.ServiceId} with grainId {grainRef.ToKeyString()} and name {reminderName}.");
+                this._logger.LogError(exc, $"Failure removing reminders for Service {this._serviceId} with grainId {grainRef.ToKeyString()} and name {reminderName}.");
                 throw;
             }
         }
@@ -159,11 +180,11 @@ namespace Orleans.Reminders.CosmosDB
             {
                 await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<bool>(
                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, DELETE_ROWS_SPROC),
-                       this._siloOptions.ServiceId)).ConfigureAwait(false);
+                       this._serviceId)).ConfigureAwait(false);
             }
             catch (Exception exc)
             {
-                this._logger.LogError(exc, $"Failure to clear reminders for Service {this._siloOptions.ServiceId}.");
+                this._logger.LogError(exc, $"Failure to clear reminders for Service {this._serviceId}.");
                 throw;
             }
         }
@@ -181,7 +202,7 @@ namespace Orleans.Reminders.CosmosDB
             }
             catch (Exception exc)
             {
-                this._logger.LogError(exc, $"Failure to upsert reminder for Service {this._siloOptions.ServiceId}.");
+                this._logger.LogError(exc, $"Failure to upsert reminder for Service {this._serviceId}.");
                 throw;
             }
         }
@@ -190,7 +211,7 @@ namespace Orleans.Reminders.CosmosDB
         {
             return new ReminderEntity
             {
-                ServiceId = this._siloOptions.ServiceId,
+                ServiceId = this._serviceId,
                 GrainHash = entry.GrainRef.GetUniformHashCode(),
                 GrainId = entry.GrainRef.ToKeyString(),
                 Name = entry.ReminderName,

@@ -1,7 +1,7 @@
 using Orleans.CosmosDB.Tests.Grains;
 using Orleans.Hosting;
-using Orleans.Runtime.Configuration;
 using System.Collections.Generic;
+using System.Net;
 using System.Threading.Tasks;
 using Xunit;
 using static Orleans.CosmosDB.Tests.PersistenceTests;
@@ -17,10 +17,8 @@ namespace Orleans.CosmosDB.Tests
         {
             protected override ISiloHostBuilder PreBuild(ISiloHostBuilder builder)
             {
-                var siloConfig = ClusterConfiguration.LocalhostPrimarySilo();
-                siloConfig.AddAzureCosmosDBPersistence(TEST_STORAGE);
-                return builder.UseConfiguration(siloConfig)
-                    .UseAzureCosmosDBPersistence(opt =>
+                return builder
+                    .AddCosmosDBGrainStorage(TEST_STORAGE, opt =>
                     {
                         opt.AccountEndpoint = "https://localhost:8081";
                         opt.AccountKey = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==";

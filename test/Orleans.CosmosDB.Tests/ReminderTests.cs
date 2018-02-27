@@ -1,6 +1,6 @@
 using Orleans.CosmosDB.Tests.Grains;
 using Orleans.Hosting;
-using Orleans.Runtime.Configuration;
+using System.Net;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
@@ -17,13 +17,11 @@ namespace Orleans.CosmosDB.Tests
             public const string TEST_STORAGE = "TEST_STORAGE_PROVIDER";
             protected override ISiloHostBuilder PreBuild(ISiloHostBuilder builder)
             {
-                var siloConfig = ClusterConfiguration.LocalhostPrimarySilo();
                 //siloConfig.Globals.ReminderServiceType = GlobalConfiguration.ReminderServiceProviderType.Custom;
                 //siloConfig.Globals.ReminderTableAssembly = "Orleans.Reminders.CosmosDB";
-                siloConfig.AddAzureCosmosDBReminders();
-                siloConfig.AddAzureCosmosDBPersistence(TEST_STORAGE);
-                return builder.UseConfiguration(siloConfig)
-                    .UseAzureCosmosDBPersistence(opt =>
+                //siloConfig.AddAzureCosmosDBPersistence(TEST_STORAGE);
+                return builder.UseDevelopmentClustering(opt => opt.PrimarySiloEndpoint = new IPEndPoint(IPAddress.Any, 10000))//.UseConfiguration(siloConfig)
+                    .AddCosmosDBGrainStorage(TEST_STORAGE, opt =>
                     {
                         opt.AccountEndpoint = ACC_ENDPOINT;
                         opt.AccountKey = ACC_KEY;
@@ -31,7 +29,7 @@ namespace Orleans.CosmosDB.Tests
                         opt.AutoUpdateStoredProcedures = true;
                         opt.DB = "OrleansRemindersTest";
                     })
-                    .UseAzureCosmosDBReminders(opt =>
+                    .UseCosmosDBReminderService(opt =>
                     {
                         opt.AccountEndpoint = ACC_ENDPOINT;
                         opt.AccountKey = ACC_KEY;

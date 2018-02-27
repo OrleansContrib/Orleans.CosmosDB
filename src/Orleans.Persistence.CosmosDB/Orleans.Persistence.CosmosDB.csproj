@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -19,7 +20,7 @@
     <RepositoryType>git</RepositoryType>
     <IncludeSymbols>true</IncludeSymbols>
     <IncludeSource>true</IncludeSource>
-    <VersionPrefix>1.0.1-preview-1</VersionPrefix>
+    <VersionPrefix>1.1.0-rc1</VersionPrefix>
   </PropertyGroup>
 
   <ItemGroup>
@@ -45,8 +46,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Azure.DocumentDB.Core" Version="1.7.1" />
-    <PackageReference Include="Microsoft.Orleans.OrleansRuntime" Version="2.0.0-beta3" />
+    <PackageReference Include="Microsoft.Azure.DocumentDB.Core" Version="1.8.2" />
+    <PackageReference Include="Microsoft.Orleans.OrleansRuntime" Version="2.0.0-rc1" />
   </ItemGroup>
 
   <ItemGroup>
