@@ -4,7 +4,7 @@ function ReadRangeRows(serviceId, beginHash, endHash) {
   var response = context.getResponse();
 
   if (!serviceId) throw new Error('serviceId is required');
-  if (!beginHash) throw new Error('beginHash is required');
+  if (isNaN(beginHash) && !beginHash) throw new Error('beginHash is required');
   if (!endHash) throw new Error('endHash is required');
 
   var query = 'SELECT * FROM c WHERE c.ServiceId = "' + serviceId + '"';
