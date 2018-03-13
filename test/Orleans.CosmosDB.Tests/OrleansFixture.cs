@@ -3,6 +3,7 @@ using Orleans.Hosting;
 using Orleans.Runtime;
 using Orleans.Runtime.Configuration;
 using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Threading.Tasks;
 
@@ -23,7 +24,7 @@ namespace Orleans.CosmosDB.Tests
             ClusterConfiguration clusterConfig = ClusterConfiguration.LocalhostPrimarySilo();
             var builder = new SiloHostBuilder();
             var silo = PreBuild(builder)
-                .Configure(options => options.ClusterId = "TESTCLUSTER")
+                .Configure<ClusterOptions>(options => options.ClusterId = "TESTCLUSTER")
                 .UseDevelopmentClustering(options => options.PrimarySiloEndpoint = new IPEndPoint(siloAddress, siloPort))
                 .ConfigureEndpoints(siloAddress, siloPort, gatewayPort)
                 //.UseConfiguration(clusterConfig)
@@ -37,8 +38,8 @@ namespace Orleans.CosmosDB.Tests
             ClientConfiguration clientConfig = ClientConfiguration.LocalhostSilo();
             var client = new ClientBuilder()
                 //.UseConfiguration(clientConfig)
-                .ConfigureCluster(c => c.ClusterId = "TESTCLUSTER")
-                .UseStaticClustering(options => options.Gateways = new[] { new IPEndPoint(siloAddress, gatewayPort).ToGatewayUri() })
+                .Configure<ClusterOptions>(c => c.ClusterId = "TESTCLUSTER")
+                .UseStaticClustering(options => options.Gateways = new List<Uri> { new IPEndPoint(siloAddress, gatewayPort).ToGatewayUri() })
                 .ConfigureApplicationParts(pm => pm.AddApplicationPart(typeof(PersistenceTests).Assembly))
                 .Build();
 
@@ -51,8 +52,8 @@ namespace Orleans.CosmosDB.Tests
 
         public void Dispose()
         {
-            Client.Close().Wait();
-            Silo.StopAsync().Wait();
+            this.Client.Close().Wait();
+            this.Silo.StopAsync().Wait();
         }
     }
 }
