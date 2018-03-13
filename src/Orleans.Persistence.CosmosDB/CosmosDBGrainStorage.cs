@@ -67,7 +67,7 @@ namespace Orleans.Persistence.CosmosDB
 
         public void Participate(ISiloLifecycle lifecycle)
         {
-            lifecycle.Subscribe(this._options.InitStage, this.Init, this.Close);
+            lifecycle.Subscribe(OptionFormattingUtilities.Name<CosmosDBGrainStorage>(this._name), this._options.InitStage, this.Init, this.Close);
         }
 
         public async Task Init(CancellationToken ct)
