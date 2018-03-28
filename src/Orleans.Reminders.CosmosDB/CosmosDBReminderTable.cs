@@ -44,7 +44,7 @@ namespace Orleans.Reminders.CosmosDB
             this._logger = loggerFactory.CreateLogger(nameof(CosmosDBReminderTable));
             this._options = options.Value;
             this._grainReferenceConverter = grainReferenceConverter;
-            this._serviceId = _clusterOptions.Value.ServiceId;
+            this._serviceId = string.IsNullOrWhiteSpace(_clusterOptions.Value.ServiceId) ? Guid.Empty : Guid.Parse(_clusterOptions.Value.ServiceId);
 
             this._sprocFiles = new Dictionary<string, string>
             {
