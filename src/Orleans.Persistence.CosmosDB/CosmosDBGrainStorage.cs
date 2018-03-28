@@ -33,7 +33,7 @@ namespace Orleans.Persistence.CosmosDB
 
         private readonly Dictionary<string, string> _sprocFiles;
 
-        private readonly Guid _serviceId;
+        private readonly string _serviceId;
         private readonly string _name;
         private readonly SerializationManager _serializationManager;
         private readonly ILoggerFactory _loggerFactory;
