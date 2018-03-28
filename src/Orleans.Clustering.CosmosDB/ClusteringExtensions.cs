@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using Orleans.Clustering.CosmosDB;
+using Orleans.Configuration;
 using Orleans.Hosting;
 using Orleans.Messaging;
 using System;
