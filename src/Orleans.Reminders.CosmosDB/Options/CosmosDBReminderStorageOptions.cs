@@ -1,3 +1,4 @@
+using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
@@ -34,5 +35,8 @@ namespace Orleans.Reminders.CosmosDB
         /// Delete the database on initialization.  Useful for testing scenarios.
         /// </summary>
         public bool DropDatabaseOnInit { get; set; }
+
+        // TODO: Consistency level for emulator (defaults to Session; https://docs.microsoft.com/en-us/azure/cosmos-db/local-emulator)
+        internal ConsistencyLevel? GetConsistencyLevel() => this.AccountEndpoint.Contains("localhost") ? (ConsistencyLevel?)ConsistencyLevel.Session : null;
     }
 }

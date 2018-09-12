@@ -13,6 +13,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Threading;
@@ -30,6 +31,7 @@ namespace Orleans.Persistence.CosmosDB
         private const string WRITE_STATE_SPROC = "WriteState";
         private const string READ_STATE_SPROC = "ReadState";
         private const string CLEAR_STATE_SPROC = "ClearState";
+        private const string LOOKUP_INDEX_SPROC = "LookupIndex";
 
         private readonly Dictionary<string, string> _sprocFiles;
 
@@ -41,9 +43,11 @@ namespace Orleans.Persistence.CosmosDB
         private readonly IGrainFactory _grainFactory;
         private readonly ITypeResolver _typeResolver;
         private readonly CosmosDBStorageOptions _options;
-        private DocumentClient _dbClient;
+        internal DocumentClient _dbClient;  // internal for test
+        private IGrainReferenceConverter _grainReferenceConverter;
 
         public CosmosDBGrainStorage(string name, CosmosDBStorageOptions options, SerializationManager serializationManager,
+            Providers.IProviderRuntime providerRuntime,
             IOptions<ClusterOptions> clusterOptions, IGrainFactory grainFactory, ITypeResolver typeResolver, ILoggerFactory loggerFactory)
         {
             this._name = name;
@@ -56,12 +60,14 @@ namespace Orleans.Persistence.CosmosDB
             this._grainFactory = grainFactory;
             this._typeResolver = typeResolver;
             this._serviceId = clusterOptions.Value.ServiceId;
+            this._grainReferenceConverter = (IGrainReferenceConverter)providerRuntime.ServiceProvider.GetService(typeof(IGrainReferenceConverter));
 
             this._sprocFiles = new Dictionary<string, string>
             {
                 { WRITE_STATE_SPROC, $"{WRITE_STATE_SPROC}.js" },
                 { READ_STATE_SPROC, $"{READ_STATE_SPROC}.js" },
-                { CLEAR_STATE_SPROC, $"{CLEAR_STATE_SPROC}.js" }
+                { CLEAR_STATE_SPROC, $"{CLEAR_STATE_SPROC}.js" },
+                { LOOKUP_INDEX_SPROC, $"{LOOKUP_INDEX_SPROC}.js" }
             };
         }
 
@@ -224,6 +230,37 @@ namespace Orleans.Persistence.CosmosDB
             }
         }
 
+        public async Task<List<GrainReference>> LookupAsync<K>(string grainType, string indexedField, K key)
+        {
+            if (this._dbClient == null) throw new ArgumentException("GrainState collection not initialized.");
+
+            var keyString = key.ToString();
+            if (!IsNumericType(typeof(K)))
+            {
+                keyString = $"\"{keyString}\"";
+            }
+            var logMessage = $"GrainType={grainType} IndexedField={indexedField} Key={keyString} from Collection={this._options.Collection}";
+            if (this._logger.IsEnabled(LogLevel.Trace)) this._logger.Trace($"Reading: {logMessage}");
+
+            try
+            {
+                var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<GrainStateEntity[]>(
+                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, LOOKUP_INDEX_SPROC),
+                        new RequestOptions { PartitionKey = new PartitionKey(grainType) },
+                        grainType, indexedField, keyString)).ConfigureAwait(false);
+
+                return spResponse.Response == null
+                    ? new List<GrainReference>()
+                    // Note: Utils.FromKeyString is missing from v2.0.3 Orleans, so use this workaround.
+                    : spResponse.Response.Select(entity => this._grainReferenceConverter.GetGrainFromKeyString(GetGrainReferenceString(entity.Id))).ToList();
+            }
+            catch (Exception exc)
+            {
+                this._logger.LogError(exc, $"Failure reading state for {logMessage}.");
+                throw;
+            }
+        }
+
         public Task Close(CancellationToken ct)
         {
             this._dbClient.Dispose();
@@ -269,7 +306,30 @@ namespace Orleans.Persistence.CosmosDB
             }
         }
 
-        private string GetKeyString(GrainReference grainReference) => $"{this._serviceId}_{grainReference.ToKeyString()}";
+        private const string KeyStringSeparator = "__";
+        private string GetKeyString(GrainReference grainReference) => $"{this._serviceId}{KeyStringSeparator}{grainReference.ToKeyString()}";
+        private string GetGrainReferenceString(string keyString) => keyString.Substring(keyString.IndexOf(KeyStringSeparator) + KeyStringSeparator.Length);
+
+        private static bool IsNumericType(Type o)
+        {
+            switch (Type.GetTypeCode(o))
+            {
+                case TypeCode.Byte:
+                case TypeCode.SByte:
+                case TypeCode.UInt16:
+                case TypeCode.UInt32:
+                case TypeCode.UInt64:
+                case TypeCode.Int16:
+                case TypeCode.Int32:
+                case TypeCode.Int64:
+                case TypeCode.Decimal:
+                case TypeCode.Double:
+                case TypeCode.Single:
+                    return true;
+                default:
+                    return false;
+            }
+        }
 
         private async Task TryCreateCosmosDBResources()
         {
@@ -289,8 +349,8 @@ namespace Orleans.Persistence.CosmosDB
             {
                 foreach (var idx in this._options.StateFieldsToIndex)
                 {
-                    var path = idx.StartsWith("/") ? $"/State{idx}" : $"/State/{idx}";
-                    stateCollection.IndexingPolicy.IncludedPaths.Add(new IncludedPath { Path = path });
+                    var path = idx.StartsWith("/") ? idx.Substring(1) : idx;
+                    stateCollection.IndexingPolicy.IncludedPaths.Add(new IncludedPath { Path = $"/\"State\"/\"{idx}\"/?" });
                 }
             }
 
@@ -300,8 +360,7 @@ namespace Orleans.Persistence.CosmosDB
                 new RequestOptions
                 {
                     PartitionKey = new PartitionKey(PARTITION_KEY),
-                    //TODO: Check the consistency level for the emulator
-                    //ConsistencyLevel = ConsistencyLevel.Strong,
+                    ConsistencyLevel = this._options.GetConsistencyLevel(),
                     OfferThroughput = this._options.CollectionThroughput
                 });
         }

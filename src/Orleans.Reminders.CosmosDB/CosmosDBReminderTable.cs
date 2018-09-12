@@ -311,8 +311,7 @@ namespace Orleans.Reminders.CosmosDB
                 remindersCollection,
                 new RequestOptions
                 {
-                    //TODO: Check the consistency level for the emulator
-                    //ConsistencyLevel = ConsistencyLevel.Strong,
+                    ConsistencyLevel = this._options.GetConsistencyLevel(),
                     OfferThroughput = this._options.CollectionThroughput
                 });
         }

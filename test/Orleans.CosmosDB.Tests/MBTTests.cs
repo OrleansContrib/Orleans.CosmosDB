@@ -26,33 +26,32 @@ namespace Orleans.CosmosDB.Tests
             return filters;
         }
 
-        protected override IMembershipTable CreateMembershipTable(ILogger logger)
+        protected override IMembershipTable CreateMembershipTable(ILogger logger, string accountEndpoint, string accountKey)
         {
             //TestUtils.CheckForAzureStorage();
             var options = new CosmosDBClusteringOptions()
             {
-                AccountEndpoint = "https://localhost:8081",
-                AccountKey = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
+                AccountEndpoint = accountEndpoint,
+                AccountKey = accountKey,
                 CanCreateResources = true,
                 AutoUpdateStoredProcedures = true,
                 DropDatabaseOnInit = true,
                 ConnectionMode = Microsoft.Azure.Documents.Client.ConnectionMode.Gateway,
                 DB = "OrleansMBRTest"
-
             };
-            return new CosmosDBMembershipTable(loggerFactory, Options.Create(new ClusterOptions { ClusterId = this.clusterId }), Options.Create(options));
+            return new CosmosDBMembershipTable(this.loggerFactory, Options.Create(new ClusterOptions { ClusterId = this.clusterId }), Options.Create(options));
         }
 
-        protected override IGatewayListProvider CreateGatewayListProvider(ILogger logger)
+        protected override IGatewayListProvider CreateGatewayListProvider(ILogger logger, string accountEndpoint, string accountKey)
         {
             var options = new CosmosDBGatewayOptions()
             {
-                AccountEndpoint = "https://localhost:8081",
-                AccountKey = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
+                AccountEndpoint = accountEndpoint,
+                AccountKey = accountKey,
                 ConnectionMode = Microsoft.Azure.Documents.Client.ConnectionMode.Gateway,
                 DB = "OrleansMBRTest"
             };
-            return new CosmosDBGatewayListProvider(loggerFactory,
+            return new CosmosDBGatewayListProvider(this.loggerFactory,
                 Options.Create(options),
                 Options.Create(new ClusterOptions { ClusterId = this.clusterId }),
                 Options.Create(new GatewayOptions()));
