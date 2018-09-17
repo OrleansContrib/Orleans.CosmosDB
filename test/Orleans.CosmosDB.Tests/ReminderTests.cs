@@ -27,7 +27,10 @@ namespace Orleans.CosmosDB.Tests
                         opt.AccountEndpoint = accountEndpoint;
                         opt.AccountKey = accountKey;
                         opt.ConnectionMode = Microsoft.Azure.Documents.Client.ConnectionMode.Gateway;
+                        opt.DropDatabaseOnInit = true;
+                        opt.CanCreateResources = true;
                         opt.AutoUpdateStoredProcedures = true;
+                        opt.InitStage = ServiceLifecycleStage.RuntimeStorageServices;
                         opt.DB = DatabaseName;
                     })
                     .UseCosmosDBReminderService(opt =>
@@ -35,7 +38,6 @@ namespace Orleans.CosmosDB.Tests
                         opt.AccountEndpoint = accountEndpoint;
                         opt.AccountKey = accountKey;
                         opt.ConnectionMode = Microsoft.Azure.Documents.Client.ConnectionMode.Gateway;
-                        opt.DropDatabaseOnInit = true;
                         opt.CanCreateResources = true;
                         opt.AutoUpdateStoredProcedures = true;
                         opt.DB = DatabaseName;
@@ -45,7 +47,7 @@ namespace Orleans.CosmosDB.Tests
 
         private ReminderFixture _fixture;
 
-        public ReminderTests(ITestOutputHelper log, ReminderFixture fixture)
+        public ReminderTests(ReminderFixture fixture)
         {
             this._fixture = fixture;
         }

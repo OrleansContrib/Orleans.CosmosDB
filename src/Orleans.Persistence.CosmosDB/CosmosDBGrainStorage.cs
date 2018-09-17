@@ -46,6 +46,8 @@ namespace Orleans.Persistence.CosmosDB
         internal DocumentClient _dbClient;  // internal for test
         private IGrainReferenceConverter _grainReferenceConverter;
 
+        private const HttpStatusCode TooManyRequests = (HttpStatusCode)429;
+
         public CosmosDBGrainStorage(string name, CosmosDBStorageOptions options, SerializationManager serializationManager,
             Providers.IProviderRuntime providerRuntime,
             IOptions<ClusterOptions> clusterOptions, IGrainFactory grainFactory, ITypeResolver typeResolver, ILoggerFactory loggerFactory)
@@ -270,39 +272,22 @@ namespace Orleans.Persistence.CosmosDB
         private static async Task<TResult> ExecuteWithRetries<TResult>(Func<Task<TResult>> clientFunc)
         {
             // From:  https://blogs.msdn.microsoft.com/bigdatasupport/2015/09/02/dealing-with-requestratetoolarge-errors-in-azure-documentdb-and-testing-performance/
-
-            TimeSpan sleepTime = TimeSpan.Zero;
-
             while (true)
             {
+                var sleepTime = TimeSpan.Zero;
                 try
                 {
                     return await clientFunc();
                 }
-                catch (DocumentClientException dce)
+                catch (DocumentClientException dce) when (dce.StatusCode == TooManyRequests)
                 {
-                    if ((int)dce.StatusCode != 429)
-                    {
-                        throw;
-                    }
-                }
-                catch (AggregateException ae)
-                {
-                    if (!(ae.InnerException is DocumentClientException))
-                    {
-                        throw;
-                    }
-
-                    DocumentClientException dce = (DocumentClientException)ae.InnerException;
-                    if ((int)dce.StatusCode != 429)
-                    {
-                        throw;
-                    }
-
                     sleepTime = dce.RetryAfter;
-
-                    await Task.Delay(sleepTime);
                 }
+                catch (AggregateException ae) when ((ae.InnerException is DocumentClientException dce) && dce.StatusCode == TooManyRequests)
+                {
+                    sleepTime = dce.RetryAfter;
+                }
+                await Task.Delay(sleepTime);
             }
         }
 
@@ -333,7 +318,7 @@ namespace Orleans.Persistence.CosmosDB
 
         private async Task TryCreateCosmosDBResources()
         {
-            await this._dbClient.CreateDatabaseIfNotExistsAsync(new Database { Id = this._options.DB });
+            var dbResponse = await this._dbClient.CreateDatabaseIfNotExistsAsync(new Database { Id = this._options.DB });
 
             var stateCollection = new DocumentCollection
             {
@@ -354,15 +339,24 @@ namespace Orleans.Persistence.CosmosDB
                 }
             }
 
-            await this._dbClient.CreateDocumentCollectionIfNotExistsAsync(
-                UriFactory.CreateDatabaseUri(this._options.DB),
-                stateCollection,
-                new RequestOptions
+            const int maxRetries = 3;
+            for (var retry = 0; retry <= maxRetries; ++retry)
+            {
+                var collResponse = await this._dbClient.CreateDocumentCollectionIfNotExistsAsync(
+                    UriFactory.CreateDatabaseUri(this._options.DB),
+                    stateCollection,
+                    new RequestOptions
+                    {
+                        PartitionKey = new PartitionKey(PARTITION_KEY),
+                        ConsistencyLevel = this._options.GetConsistencyLevel(),
+                        OfferThroughput = this._options.CollectionThroughput
+                    });
+                if (retry == maxRetries || dbResponse.StatusCode != HttpStatusCode.Created || collResponse.StatusCode == HttpStatusCode.Created)
                 {
-                    PartitionKey = new PartitionKey(PARTITION_KEY),
-                    ConsistencyLevel = this._options.GetConsistencyLevel(),
-                    OfferThroughput = this._options.CollectionThroughput
-                });
+                    break;  // Apparently some throttling logic returns HttpStatusCode.OK (not 429) when the collection wasn't created in a new DB.
+                }
+                await Task.Delay(1000);
+            }
         }
 
         private async Task TryDeleteDatabase()
@@ -373,16 +367,9 @@ namespace Orleans.Persistence.CosmosDB
                 await this._dbClient.ReadDatabaseAsync(dbUri);
                 await this._dbClient.DeleteDatabaseAsync(dbUri);
             }
-            catch (DocumentClientException dce)
+            catch (DocumentClientException dce) when (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
-                if (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
-                {
-                    return;
-                }
-                else
-                {
-                    throw;
-                }
+                return;
             }
         }
 
@@ -417,16 +404,9 @@ namespace Orleans.Persistence.CosmosDB
                     await this._dbClient.DeleteStoredProcedureAsync(storedProcUri);
                 }
             }
-            catch (DocumentClientException dce)
+            catch (DocumentClientException dce) when (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
-                if (dce.StatusCode == HttpStatusCode.NotFound)
-                {
-                    insertStoredProc = true;
-                }
-                else
-                {
-                    throw;
-                }
+                insertStoredProc = true;
             }
             catch (Exception exc)
             {

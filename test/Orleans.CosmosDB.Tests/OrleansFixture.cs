@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
+using System.Threading;
 
 namespace Orleans.CosmosDB.Tests
 {
@@ -16,16 +17,20 @@ namespace Orleans.CosmosDB.Tests
         public IClusterClient Client { get; }
 
         private const string ClusterId = "TESTCLUSTER";
-        private static string serviceId = Guid.NewGuid().ToString();   // Reminders will parse this as a GUID.
+
+        private static int portIncrement;
 
         public OrleansFixture()
         {
+            string serviceId = Guid.NewGuid().ToString();   // This is required by some tests; Reminders will parse it as a GUID.
+
             //siloConfig.Globals.FallbackSerializationProvider = typeof(ILBasedSerializer).GetTypeInfo();
-            ClusterConfiguration clusterConfig = ClusterConfiguration.LocalhostPrimarySilo();
+            var portInc = Interlocked.Increment(ref portIncrement);
+            var siloPort = EndpointOptions.DEFAULT_SILO_PORT + portInc;
+            var gatewayPort = EndpointOptions.DEFAULT_GATEWAY_PORT + portInc;
+            ClusterConfiguration clusterConfig = ClusterConfiguration.LocalhostPrimarySilo(siloPort, gatewayPort);
             var configDefaults = clusterConfig.Defaults;
-            int gatewayPort = configDefaults.ProxyGatewayEndpoint.Port;
             var siloAddress = clusterConfig.PrimaryNode.Address;
-            var siloPort = clusterConfig.PrimaryNode.Port;
 
             var builder = new SiloHostBuilder();
             var silo = PreBuild(builder)
@@ -49,8 +54,8 @@ namespace Orleans.CosmosDB.Tests
                 //.UseConfiguration(clientConfig)
                 .Configure<ClusterOptions>(options =>
                 {
-                    options.ClusterId = "TESTCLUSTER";
-                    options.ServiceId = "TESTSERVICE";
+                    options.ClusterId = ClusterId;
+                    options.ServiceId = serviceId;
                 })
                 .UseStaticClustering(options => options.Gateways = new List<Uri> { new IPEndPoint(siloAddress, gatewayPort).ToGatewayUri() })
                 .ConfigureApplicationParts(pm => pm.AddApplicationPart(typeof(PersistenceTests).Assembly))
@@ -67,6 +72,7 @@ namespace Orleans.CosmosDB.Tests
 
         internal static void GetAccountInfo(out string accountEndpoint, out string accountKey)
         {
+            // Default to emulator
             accountEndpoint = "https://localhost:8081";
             accountKey = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==";
 

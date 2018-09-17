@@ -138,10 +138,10 @@ namespace Orleans.CosmosDB.Tests
                     $" AND (c.State.UserState.FtIndexedString = \"{ftValue(42)}\" OR c.State.NftIndexedInt = 5)",
                 new FeedOptions
                 {
-                     PopulateQueryMetrics = true,
-                     MaxItemCount = -1,
-                     MaxDegreeOfParallelism = -1,
-                     EnableCrossPartitionQuery = true
+                    PopulateQueryMetrics = true,
+                    MaxItemCount = -1,
+                    MaxDegreeOfParallelism = -1,
+                    EnableCrossPartitionQuery = true
                 }).AsDocumentQuery();
             FeedResponse<dynamic> result = await query.ExecuteNextAsync();
 
