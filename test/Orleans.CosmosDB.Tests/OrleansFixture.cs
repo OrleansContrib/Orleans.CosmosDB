@@ -18,14 +18,15 @@ namespace Orleans.CosmosDB.Tests
 
         private const string ClusterId = "TESTCLUSTER";
 
-        private static int portIncrement;
+        // Use distinct silo ports for each test as they may run in parallel.
+        private static int portUniquifier;
 
         public OrleansFixture()
         {
             string serviceId = Guid.NewGuid().ToString();   // This is required by some tests; Reminders will parse it as a GUID.
 
             //siloConfig.Globals.FallbackSerializationProvider = typeof(ILBasedSerializer).GetTypeInfo();
-            var portInc = Interlocked.Increment(ref portIncrement);
+            var portInc = Interlocked.Increment(ref portUniquifier);
             var siloPort = EndpointOptions.DEFAULT_SILO_PORT + portInc;
             var gatewayPort = EndpointOptions.DEFAULT_GATEWAY_PORT + portInc;
             ClusterConfiguration clusterConfig = ClusterConfiguration.LocalhostPrimarySilo(siloPort, gatewayPort);
@@ -76,7 +77,7 @@ namespace Orleans.CosmosDB.Tests
             accountEndpoint = "https://localhost:8081";
             accountKey = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==";
 
-            if (GetFileInCurrentOrParentDir("CosmosDBSecrets.json", out string secretsFile))
+            if (GetFileInCurrentOrParentDir("CosmosDBTestSecrets.json", out string secretsFile))
             {
                 var secrets = JObject.Parse(File.ReadAllText(secretsFile));
                 if (secrets.TryGetValue("CosmosDBEndpoint", StringComparison.OrdinalIgnoreCase, out JToken value))
@@ -92,17 +93,17 @@ namespace Orleans.CosmosDB.Tests
 
         private static bool GetFileInCurrentOrParentDir(string fileName, out string foundFileName)
         {
-            foundFileName = null;
             for (var dirName = new DirectoryInfo(Directory.GetCurrentDirectory()); dirName != null && dirName.Exists; dirName = dirName.Parent)
             {
                 var filePath = Path.Combine(dirName.FullName, fileName);
                 if (File.Exists(filePath))
                 {
                     foundFileName = filePath;
-                    break;
+                    return true;
                 }
             }
-            return foundFileName != null;
+            foundFileName = null;
+            return false;
         }
 
         public void Dispose()

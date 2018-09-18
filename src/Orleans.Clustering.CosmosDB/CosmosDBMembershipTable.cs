@@ -368,16 +368,9 @@ namespace Orleans.Clustering.CosmosDB
                 await this._dbClient.ReadDatabaseAsync(dbUri);
                 await this._dbClient.DeleteDatabaseAsync(dbUri);
             }
-            catch (DocumentClientException dce)
+            catch (DocumentClientException dce) when (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
-                if (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
-                {
-                    return;
-                }
-                else
-                {
-                    throw;
-                }
+                return;
             }
         }
 
@@ -445,16 +438,9 @@ namespace Orleans.Clustering.CosmosDB
                     await this._dbClient.DeleteStoredProcedureAsync(storedProcUri);
                 }
             }
-            catch (DocumentClientException dce)
+            catch (DocumentClientException dce) when (dce.StatusCode == HttpStatusCode.NotFound)
             {
-                if (dce.StatusCode == HttpStatusCode.NotFound)
-                {
-                    insertStoredProc = true;
-                }
-                else
-                {
-                    throw;
-                }
+                insertStoredProc = true;
             }
             catch (Exception exc)
             {

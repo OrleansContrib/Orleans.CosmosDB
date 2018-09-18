@@ -232,6 +232,7 @@ namespace Orleans.Persistence.CosmosDB
             }
         }
 
+        // This method is invoked via "dynamic" by Orleans.Indexing. A future interface may be designed for this.
         public async Task<List<GrainReference>> LookupAsync<K>(string grainType, string indexedField, K key)
         {
             if (this._dbClient == null) throw new ArgumentException("GrainState collection not initialized.");
