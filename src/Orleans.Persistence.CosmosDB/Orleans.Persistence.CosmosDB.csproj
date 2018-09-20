@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <None Remove="Sprocs\ClearState.js" />
+    <None Remove="Sprocs\LookupIndex.js" />
     <None Remove="Sprocs\ReadState.js" />
     <None Remove="Sprocs\WriteState.js" />
   </ItemGroup>
@@ -37,6 +38,9 @@
     <EmbeddedResource Include="Sprocs\ClearState.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </EmbeddedResource>
+    <EmbeddedResource Include="Sprocs\LookupIndex.js">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </EmbeddedResource>
     <EmbeddedResource Include="Sprocs\ReadState.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </EmbeddedResource>
@@ -47,7 +51,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Azure.DocumentDB.Core" Version="1.9.1" />
-    <PackageReference Include="Microsoft.Orleans.OrleansRuntime" Version="2.0.0" />
+    <PackageReference Include="Microsoft.Orleans.Core" Version="2.0.3" />
+    <PackageReference Include="Microsoft.Orleans.OrleansRuntime" Version="2.0.4" />
   </ItemGroup>
 
   <ItemGroup>

@@ -34,6 +34,8 @@ namespace Orleans.Reminders.CosmosDB
 
         private DocumentClient _dbClient;
 
+        private const HttpStatusCode TooManyRequests = (HttpStatusCode)429;
+
         public CosmosDBReminderTable(
             IGrainReferenceConverter grainReferenceConverter,
             ILoggerFactory loggerFactory,
@@ -223,39 +225,22 @@ namespace Orleans.Reminders.CosmosDB
         private static async Task<TResult> ExecuteWithRetries<TResult>(Func<Task<TResult>> clientFunc)
         {
             // From:  https://blogs.msdn.microsoft.com/bigdatasupport/2015/09/02/dealing-with-requestratetoolarge-errors-in-azure-documentdb-and-testing-performance/
-
-            TimeSpan sleepTime = TimeSpan.Zero;
-
             while (true)
             {
+                var sleepTime = TimeSpan.Zero;
                 try
                 {
                     return await clientFunc();
                 }
-                catch (DocumentClientException dce)
+                catch (DocumentClientException dce) when (dce.StatusCode == TooManyRequests)
                 {
-                    if ((int)dce.StatusCode != 429)
-                    {
-                        throw;
-                    }
-                }
-                catch (AggregateException ae)
-                {
-                    if (!(ae.InnerException is DocumentClientException))
-                    {
-                        throw;
-                    }
-
-                    DocumentClientException dce = (DocumentClientException)ae.InnerException;
-                    if ((int)dce.StatusCode != 429)
-                    {
-                        throw;
-                    }
-
                     sleepTime = dce.RetryAfter;
-
-                    await Task.Delay(sleepTime);
                 }
+                catch (AggregateException ae) when ((ae.InnerException is DocumentClientException dce) && dce.StatusCode == TooManyRequests)
+                {
+                    sleepTime = dce.RetryAfter;
+                }
+                await Task.Delay(sleepTime);
             }
         }
 
@@ -279,22 +264,15 @@ namespace Orleans.Reminders.CosmosDB
                 await this._dbClient.ReadDatabaseAsync(dbUri);
                 await this._dbClient.DeleteDatabaseAsync(dbUri);
             }
-            catch (DocumentClientException dce)
+            catch (DocumentClientException dce) when (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
-                if (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
-                {
-                    return;
-                }
-                else
-                {
-                    throw;
-                }
+                return;
             }
         }
 
         private async Task TryCreateCosmosDBResources()
         {
-            await this._dbClient.CreateDatabaseIfNotExistsAsync(new Database { Id = this._options.DB });
+            var dbResponse = await this._dbClient.CreateDatabaseIfNotExistsAsync(new Database { Id = this._options.DB });
 
             var remindersCollection = new DocumentCollection
             {
@@ -306,15 +284,23 @@ namespace Orleans.Reminders.CosmosDB
             remindersCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/StartAt/*" });
             remindersCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/Period/*" });
 
-            await this._dbClient.CreateDocumentCollectionIfNotExistsAsync(
+            const int maxRetries = 3;
+            for (var retry = 0; retry <= maxRetries; ++retry)
+            {
+                var collResponse = await this._dbClient.CreateDocumentCollectionIfNotExistsAsync(
                 UriFactory.CreateDatabaseUri(this._options.DB),
                 remindersCollection,
                 new RequestOptions
                 {
-                    //TODO: Check the consistency level for the emulator
-                    //ConsistencyLevel = ConsistencyLevel.Strong,
+                    ConsistencyLevel = this._options.GetConsistencyLevel(),
                     OfferThroughput = this._options.CollectionThroughput
                 });
+                if (retry == maxRetries || dbResponse.StatusCode != HttpStatusCode.Created || collResponse.StatusCode == HttpStatusCode.Created)
+                {
+                    break;  // Apparently some throttling logic returns HttpStatusCode.OK (not 429) when the collection wasn't created in a new DB.
+                }
+                await Task.Delay(1000);
+            }
         }
 
         private async Task UpdateStoredProcedures()
@@ -348,16 +334,9 @@ namespace Orleans.Reminders.CosmosDB
                     await this._dbClient.DeleteStoredProcedureAsync(storedProcUri);
                 }
             }
-            catch (DocumentClientException dce)
+            catch (DocumentClientException dce) when (dce.StatusCode == HttpStatusCode.NotFound)
             {
-                if (dce.StatusCode == HttpStatusCode.NotFound)
-                {
-                    insertStoredProc = true;
-                }
-                else
-                {
-                    throw;
-                }
+                insertStoredProc = true;
             }
             catch (Exception exc)
             {

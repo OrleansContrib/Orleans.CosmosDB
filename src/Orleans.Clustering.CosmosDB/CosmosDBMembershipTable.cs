@@ -368,16 +368,9 @@ namespace Orleans.Clustering.CosmosDB
                 await this._dbClient.ReadDatabaseAsync(dbUri);
                 await this._dbClient.DeleteDatabaseAsync(dbUri);
             }
-            catch (DocumentClientException dce)
+            catch (DocumentClientException dce) when (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
-                if (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
-                {
-                    return;
-                }
-                else
-                {
-                    throw;
-                }
+                return;
             }
         }
 
@@ -409,8 +402,7 @@ namespace Orleans.Clustering.CosmosDB
                 new RequestOptions
                 {
                     PartitionKey = new PartitionKey(PARTITION_KEY),
-                    //TODO: Check the consistency level for the emulator
-                    ConsistencyLevel = this._options.AccountEndpoint.Contains("localhost") ? ConsistencyLevel.Session : ConsistencyLevel.Strong,
+                    ConsistencyLevel = this._options.GetConsistencyLevel(),
                     OfferThroughput = this._options.CollectionThroughput
                 });
         }
@@ -446,16 +438,9 @@ namespace Orleans.Clustering.CosmosDB
                     await this._dbClient.DeleteStoredProcedureAsync(storedProcUri);
                 }
             }
-            catch (DocumentClientException dce)
+            catch (DocumentClientException dce) when (dce.StatusCode == HttpStatusCode.NotFound)
             {
-                if (dce.StatusCode == HttpStatusCode.NotFound)
-                {
-                    insertStoredProc = true;
-                }
-                else
-                {
-                    throw;
-                }
+                insertStoredProc = true;
             }
             catch (Exception exc)
             {

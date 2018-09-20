@@ -32,6 +32,15 @@ namespace Orleans.CosmosDB.Tests
         protected readonly string clusterId;
         protected ILoggerFactory loggerFactory;
         protected const string testDatabaseName = "OrleansMembershipTest";//for relational storage
+
+        private static string accountEndpoint;
+        private static string accountKey;
+
+        static MembershipTableTestsBase()
+        {
+            OrleansFixture.GetAccountInfo(out accountEndpoint, out accountKey);
+        }
+
         protected MembershipTableTestsBase(/*ConnectionStringFixture fixture, TestEnvironmentFixture environment, */LoggerFilterOptions filters)
         {
             //this.environment = environment;
@@ -46,10 +55,10 @@ namespace Orleans.CosmosDB.Tests
             //this.connectionString = fixture.ConnectionString;
             var adoVariant = GetAdoInvariant();
 
-            membershipTable = CreateMembershipTable(logger);
+            membershipTable = CreateMembershipTable(logger, accountEndpoint, accountKey);
             membershipTable.InitializeMembershipTable(true).WithTimeout(TimeSpan.FromMinutes(3)).Wait();
 
-            gatewayListProvider = CreateGatewayListProvider(logger);
+            gatewayListProvider = CreateGatewayListProvider(logger, accountEndpoint, accountKey);
             gatewayListProvider.InitializeGatewayListProvider().WithTimeout(TimeSpan.FromMinutes(3)).Wait();
         }
 
@@ -68,8 +77,8 @@ namespace Orleans.CosmosDB.Tests
             //this.loggerFactory.Dispose();
         }
 
-        protected abstract IGatewayListProvider CreateGatewayListProvider(ILogger logger);
-        protected abstract IMembershipTable CreateMembershipTable(ILogger logger);
+        protected abstract IGatewayListProvider CreateGatewayListProvider(ILogger logger, string accountEndpoint, string accountKey);
+        protected abstract IMembershipTable CreateMembershipTable(ILogger logger, string accountEndpoint, string accountKey);
         protected abstract Task<string> GetConnectionString();
 
         protected virtual string GetAdoInvariant()

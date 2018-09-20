@@ -12,39 +12,42 @@ namespace Orleans.CosmosDB.Tests
     {
         public class ReminderFixture : OrleansFixture
         {
-            private const string ACC_ENDPOINT = "https://localhost:8081";
-            private const string ACC_KEY = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==";
-            public const string TEST_STORAGE = "TEST_STORAGE_PROVIDER";
+            private const string DatabaseName = "OrleansRemindersTest";
+
             protected override ISiloHostBuilder PreBuild(ISiloHostBuilder builder)
             {
+                OrleansFixture.GetAccountInfo(out var accountEndpoint, out var accountKey);
+
                 //siloConfig.Globals.ReminderServiceType = GlobalConfiguration.ReminderServiceProviderType.Custom;
                 //siloConfig.Globals.ReminderTableAssembly = "Orleans.Reminders.CosmosDB";
                 //siloConfig.AddAzureCosmosDBPersistence(TEST_STORAGE);
-                return builder.UseDevelopmentClustering(opt => opt.PrimarySiloEndpoint = new IPEndPoint(IPAddress.Any, 10000))//.UseConfiguration(siloConfig)
-                    .AddCosmosDBGrainStorage(TEST_STORAGE, opt =>
+                return builder  //.UseDevelopmentClustering(opt => opt.PrimarySiloEndpoint = new IPEndPoint(IPAddress.Any, 10000))//.UseConfiguration(siloConfig)
+                    .AddCosmosDBGrainStorage(OrleansFixture.TEST_STORAGE, opt =>
                     {
-                        opt.AccountEndpoint = ACC_ENDPOINT;
-                        opt.AccountKey = ACC_KEY;
-                        opt.ConnectionMode = Microsoft.Azure.Documents.Client.ConnectionMode.Gateway;
-                        opt.AutoUpdateStoredProcedures = true;
-                        opt.DB = "OrleansRemindersTest";
-                    })
-                    .UseCosmosDBReminderService(opt =>
-                    {
-                        opt.AccountEndpoint = ACC_ENDPOINT;
-                        opt.AccountKey = ACC_KEY;
+                        opt.AccountEndpoint = accountEndpoint;
+                        opt.AccountKey = accountKey;
                         opt.ConnectionMode = Microsoft.Azure.Documents.Client.ConnectionMode.Gateway;
                         opt.DropDatabaseOnInit = true;
                         opt.CanCreateResources = true;
                         opt.AutoUpdateStoredProcedures = true;
-                        opt.DB = "OrleansRemindersTest";
+                        opt.InitStage = ServiceLifecycleStage.RuntimeStorageServices;
+                        opt.DB = DatabaseName;
+                    })
+                    .UseCosmosDBReminderService(opt =>
+                    {
+                        opt.AccountEndpoint = accountEndpoint;
+                        opt.AccountKey = accountKey;
+                        opt.ConnectionMode = Microsoft.Azure.Documents.Client.ConnectionMode.Gateway;
+                        opt.CanCreateResources = true;
+                        opt.AutoUpdateStoredProcedures = true;
+                        opt.DB = DatabaseName;
                     });
             }
         }
 
         private ReminderFixture _fixture;
 
-        public ReminderTests(ITestOutputHelper log, ReminderFixture fixture)
+        public ReminderTests(ReminderFixture fixture)
         {
             this._fixture = fixture;
         }
@@ -57,7 +60,7 @@ namespace Orleans.CosmosDB.Tests
             var reminder = await grain.RegisterReminder(test);
             Assert.NotNull(reminder);
             Assert.True(await grain.ReminderExist(test));
-            await Task.Delay(60 * 1000);
+            await Task.Delay((int)TestGrain.ReminderWaitTime.TotalMilliseconds);
             Assert.True(await grain.ReminderTicked());
             await grain.DismissReminder(test);
             Assert.False(await grain.ReminderExist(test));
