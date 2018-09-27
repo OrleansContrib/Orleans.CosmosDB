@@ -73,12 +73,12 @@ namespace Orleans.Persistence.CosmosDB
                 { LOOKUP_INDEX_SPROC, $"{LOOKUP_INDEX_SPROC}.js" }
             };
 
-            if (_options.JsonSerializerSettings == null)
+            if (this._options.JsonSerializerSettings == null)
             {
-                _options.JsonSerializerSettings = OrleansJsonSerializer.UpdateSerializerSettings(OrleansJsonSerializer.GetDefaultSerializerSettings(_typeResolver, _grainFactory),
-                    _options.UseFullAssemblyNames,
-                    _options.IndentJson,
-                    _options.TypeNameHandling);
+                this._options.JsonSerializerSettings = OrleansJsonSerializer.UpdateSerializerSettings(OrleansJsonSerializer.GetDefaultSerializerSettings(this._typeResolver, this._grainFactory),
+                    this._options.UseFullAssemblyNames,
+                    this._options.IndentJson,
+                    this._options.TypeNameHandling);
             }
         }
 
@@ -201,7 +201,7 @@ namespace Orleans.Persistence.CosmosDB
                     State = grainState.State
                 };
 
-                var entityString = JsonConvert.SerializeObject(entity, _options.JsonSerializerSettings);
+                var entityString = JsonConvert.SerializeObject(entity, this._options.JsonSerializerSettings);
 
                 var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<string>(
                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, WRITE_STATE_SPROC),
