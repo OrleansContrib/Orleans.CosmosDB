@@ -80,6 +80,7 @@ namespace Orleans.Persistence.CosmosDB
                     this._options.IndentJson,
                     this._options.TypeNameHandling);
                 this._options.JsonSerializerSettings.DefaultValueHandling = DefaultValueHandling.Include;
+                this._options.JsonSerializerSettings.PreserveReferencesHandling = PreserveReferencesHandling.None;
             }
         }
 
