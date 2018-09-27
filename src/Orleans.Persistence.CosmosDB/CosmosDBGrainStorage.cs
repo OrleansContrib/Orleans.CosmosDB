@@ -3,6 +3,7 @@ using Microsoft.Azure.Documents.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Orleans.Configuration;
 using Orleans.Persistence.CosmosDB.Models;
@@ -45,6 +46,7 @@ namespace Orleans.Persistence.CosmosDB
         private readonly CosmosDBStorageOptions _options;
         internal DocumentClient _dbClient;  // internal for test
         private IGrainReferenceConverter _grainReferenceConverter;
+        private readonly JsonSerializerSettings serializerSettings;
 
         private const HttpStatusCode TooManyRequests = (HttpStatusCode)429;
 
@@ -71,6 +73,11 @@ namespace Orleans.Persistence.CosmosDB
                 { CLEAR_STATE_SPROC, $"{CLEAR_STATE_SPROC}.js" },
                 { LOOKUP_INDEX_SPROC, $"{LOOKUP_INDEX_SPROC}.js" }
             };
+
+            serializerSettings = OrleansJsonSerializer.UpdateSerializerSettings(OrleansJsonSerializer.GetDefaultSerializerSettings(_typeResolver, _grainFactory),
+                _options.UseFullAssemblyNames,
+                _options.IndentJson,
+                _options.TypeNameHandling);
         }
 
         public void Participate(ISiloLifecycle lifecycle)
@@ -144,7 +151,7 @@ namespace Orleans.Persistence.CosmosDB
 
                 if (spResponse.Response?.State != null)
                 {
-                    grainState.State = ((JObject)spResponse.Response.State).ToObject(grainState.State.GetType()) ?? Activator.CreateInstance(grainState.State.GetType());
+                    grainState.State = JsonConvert.DeserializeObject(spResponse.Response.State.ToString(), grainState.State.GetType(), serializerSettings);
                     grainState.ETag = spResponse.Response.ETag;
                 }
                 else
@@ -192,10 +199,12 @@ namespace Orleans.Persistence.CosmosDB
                     State = grainState.State
                 };
 
+                var entityString = JsonConvert.SerializeObject(entity, serializerSettings);
+
                 var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<string>(
                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, WRITE_STATE_SPROC),
                        new RequestOptions { PartitionKey = new PartitionKey(grainType) },
-                       entity)).ConfigureAwait(false);
+                       entityString)).ConfigureAwait(false);
 
                 grainState.ETag = spResponse.Response;
             }

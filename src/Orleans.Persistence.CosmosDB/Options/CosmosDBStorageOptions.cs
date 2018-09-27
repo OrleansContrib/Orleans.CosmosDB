@@ -27,7 +27,13 @@ namespace Orleans.Persistence.CosmosDB
 
         [JsonConverter(typeof(StringEnumConverter))]
         public Protocol ConnectionProtocol { get; set; } = Protocol.Tcp;
-        
+
+        public bool UseFullAssemblyNames { get; set; } = true;
+        public bool IndentJson { get; set; } = true;
+
+        [JsonConverter(typeof(StringEnumConverter))]
+        public TypeNameHandling TypeNameHandling { get; set; } = TypeNameHandling.All;
+
         /// <summary>
         /// List of JSON path strings.
         /// Each entry on this list represents a property in the State Object that will be included in the document index.
