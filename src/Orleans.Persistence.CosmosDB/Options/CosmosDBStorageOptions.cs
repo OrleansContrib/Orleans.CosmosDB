@@ -27,8 +27,11 @@ namespace Orleans.Persistence.CosmosDB
 
         [JsonConverter(typeof(StringEnumConverter))]
         public Protocol ConnectionProtocol { get; set; } = Protocol.Tcp;
+        
+        public JsonSerializerSettings JsonSerializerSettings { get; set; }
 
         public bool UseFullAssemblyNames { get; set; } = true;
+
         public bool IndentJson { get; set; } = true;
 
         [JsonConverter(typeof(StringEnumConverter))]

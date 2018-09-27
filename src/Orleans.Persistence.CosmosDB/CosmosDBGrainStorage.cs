@@ -46,7 +46,6 @@ namespace Orleans.Persistence.CosmosDB
         private readonly CosmosDBStorageOptions _options;
         internal DocumentClient _dbClient;  // internal for test
         private IGrainReferenceConverter _grainReferenceConverter;
-        private readonly JsonSerializerSettings serializerSettings;
 
         private const HttpStatusCode TooManyRequests = (HttpStatusCode)429;
 
@@ -74,10 +73,13 @@ namespace Orleans.Persistence.CosmosDB
                 { LOOKUP_INDEX_SPROC, $"{LOOKUP_INDEX_SPROC}.js" }
             };
 
-            serializerSettings = OrleansJsonSerializer.UpdateSerializerSettings(OrleansJsonSerializer.GetDefaultSerializerSettings(_typeResolver, _grainFactory),
-                _options.UseFullAssemblyNames,
-                _options.IndentJson,
-                _options.TypeNameHandling);
+            if (_options.JsonSerializerSettings == null)
+            {
+                _options.JsonSerializerSettings = OrleansJsonSerializer.UpdateSerializerSettings(OrleansJsonSerializer.GetDefaultSerializerSettings(_typeResolver, _grainFactory),
+                    _options.UseFullAssemblyNames,
+                    _options.IndentJson,
+                    _options.TypeNameHandling);
+            }
         }
 
         public void Participate(ISiloLifecycle lifecycle)
@@ -151,7 +153,7 @@ namespace Orleans.Persistence.CosmosDB
 
                 if (spResponse.Response?.State != null)
                 {
-                    grainState.State = JsonConvert.DeserializeObject(spResponse.Response.State.ToString(), grainState.State.GetType(), serializerSettings);
+                    grainState.State = JsonConvert.DeserializeObject(spResponse.Response.State.ToString(), grainState.State.GetType(), _options.JsonSerializerSettings);
                     grainState.ETag = spResponse.Response.ETag;
                 }
                 else
@@ -199,7 +201,7 @@ namespace Orleans.Persistence.CosmosDB
                     State = grainState.State
                 };
 
-                var entityString = JsonConvert.SerializeObject(entity, serializerSettings);
+                var entityString = JsonConvert.SerializeObject(entity, _options.JsonSerializerSettings);
 
                 var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<string>(
                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, WRITE_STATE_SPROC),
