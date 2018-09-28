@@ -18,12 +18,6 @@ steps:
 
   - task: DotNetCoreCLI@2
     inputs:
-      command: 'test'
-      projects: '**/*[Tt]ests/*.csproj'
-      arguments: '--configuration $(buildConfiguration)'
-
-  - task: DotNetCoreCLI@2
-    inputs:
       command: pack
       packagesToPack: 'src/Orleans.Clustering.CosmosDB/*.csproj'
       packDirectory: '$(build.artifactStagingDirectory)'
