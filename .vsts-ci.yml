@@ -20,7 +20,7 @@ steps:
     inputs:
       command: 'test'
       projects: '**/*[Tt]ests/*.csproj'
-      arguments: '--configuration $(buildConfiguration)' --logger trx
+      arguments: '--configuration $(buildConfiguration) --logger trx'
 
   - task: PublishTestResults@2
     inputs:
