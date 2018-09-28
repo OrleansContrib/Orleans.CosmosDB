@@ -1,5 +1,6 @@
-function WriteState(entity) {
+function WriteState(entityString) {
   var context = getContext();
+  var entity = JSON.parse(entityString);
   var collection = context.getCollection();
   var response = context.getResponse();
 
@@ -11,7 +12,7 @@ function WriteState(entity) {
       if (err) throw new Error("Error: " + err.message);
 
       if (docs.length === 0) {
-        var createAccepted = collection.createDocument(collection.getSelfLink(), entity,
+        var createAccepted = collection.createDocument(collection.getSelfLink(), entityString,
           function (err, createdEntity) {
             if (err) throw new Error('Error creating StateEntity: ' + err.message);
 
@@ -20,7 +21,7 @@ function WriteState(entity) {
             response.setBody(createdEntity._etag);
           });
       } else {
-        var updateAccepted = collection.replaceDocument(docs[0]._self, entity,
+        var updateAccepted = collection.replaceDocument(docs[0]._self, entityString,
           { accessCondition: { type: 'IfMatch', condition: entity._etag } },
           function (err, updatedEntity) {
             if (err) throw new Error('Error Updating StateEntity: ' + err.message);
