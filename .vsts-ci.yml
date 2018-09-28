@@ -15,14 +15,3 @@ steps:
       command: 'build'
       projects: '**/*.csproj'
       arguments: '--configuration $(buildConfiguration)'
-
-  - task: DotNetCoreCLI@2
-    inputs:
-      command: 'test'
-      projects: '**/*[Tt]ests/*.csproj'
-      arguments: '--configuration $(buildConfiguration) --logger trx'
-
-  - task: PublishTestResults@2
-    inputs:
-      testRunner: xUnit
-      testResultsFiles: '**/*.trx'
