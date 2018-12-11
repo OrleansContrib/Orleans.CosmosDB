@@ -18,6 +18,7 @@ namespace Orleans.Reminders.CosmosDB
 {
     internal class CosmosDBReminderTable : IReminderTable
     {
+        private const string PARTITION_KEY = "/GrainId";
         private const string READ_RANGE_ROW_SPROC = "ReadRangeRows";
         private const string READ_ROW_SPROC = "ReadRow";
         private const string READ_ROWS_SPROC = "ReadRows";
@@ -278,7 +279,7 @@ namespace Orleans.Reminders.CosmosDB
             {
                 Id = this._options.Collection
             };
-
+            remindersCollection.PartitionKey.Paths.Add(PARTITION_KEY);
             remindersCollection.IndexingPolicy.IndexingMode = IndexingMode.Consistent;
             remindersCollection.IndexingPolicy.IncludedPaths.Add(new IncludedPath { Path = "/*" });
             remindersCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/StartAt/*" });
