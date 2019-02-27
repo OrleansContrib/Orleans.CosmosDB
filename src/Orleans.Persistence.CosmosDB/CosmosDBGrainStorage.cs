@@ -28,7 +28,7 @@ namespace Orleans.Persistence.CosmosDB
     /// </summary>
     public class CosmosDBGrainStorage : IGrainStorage, ILifecycleParticipant<ISiloLifecycle>
     {
-        private const string PARTITION_KEY = "/GrainType";
+        
         private const string WRITE_STATE_SPROC = "WriteState";
         private const string READ_STATE_SPROC = "ReadState";
         private const string CLEAR_STATE_SPROC = "ClearState";
@@ -45,6 +45,9 @@ namespace Orleans.Persistence.CosmosDB
         private readonly ITypeResolver _typeResolver;
         private readonly CosmosDBStorageOptions _options;
         internal DocumentClient _dbClient;  // internal for test
+
+        private string _partitionKey = "/PartitionKey"; //overwritten with old value for existing collections
+
         private IGrainReferenceConverter _grainReferenceConverter;
 
         private const HttpStatusCode TooManyRequests = (HttpStatusCode)429;
@@ -104,7 +107,9 @@ namespace Orleans.Persistence.CosmosDB
                             new ConnectionPolicy
                             {
                                 ConnectionMode = this._options.ConnectionMode,
-                                ConnectionProtocol = this._options.ConnectionProtocol
+                                ConnectionProtocol = this._options.ConnectionProtocol,
+                                RequestTimeout = TimeSpan.FromSeconds(9),
+                                RetryOptions = new RetryOptions { }
                             });
 
                 await this._dbClient.OpenAsync();
@@ -200,7 +205,8 @@ namespace Orleans.Persistence.CosmosDB
                     ETag = grainState.ETag,
                     Id = id,
                     GrainType = grainType,
-                    State = grainState.State
+                    State = grainState.State,
+                    PartitionKey = grainType
                 };
 
                 var entityString = JsonConvert.SerializeObject(entity, this._options.JsonSerializerSettings);
@@ -338,7 +344,7 @@ namespace Orleans.Persistence.CosmosDB
             {
                 Id = this._options.Collection
             };
-            stateCollection.PartitionKey.Paths.Add(PARTITION_KEY);
+            stateCollection.PartitionKey.Paths.Add(this._partitionKey);
 
             stateCollection.IndexingPolicy.IndexingMode = IndexingMode.Consistent;
             stateCollection.IndexingPolicy.IncludedPaths.Add(new IncludedPath { Path = "/*" });
@@ -361,10 +367,16 @@ namespace Orleans.Persistence.CosmosDB
                     stateCollection,
                     new RequestOptions
                     {
-                        PartitionKey = new PartitionKey(PARTITION_KEY),
+                        PartitionKey = new PartitionKey(this._partitionKey),
                         ConsistencyLevel = this._options.GetConsistencyLevel(),
                         OfferThroughput = this._options.CollectionThroughput
                     });
+                if (collResponse.StatusCode == HttpStatusCode.OK || collResponse.StatusCode == HttpStatusCode.Created)
+                {
+                    var documentCollection =  (DocumentCollection)collResponse;
+                    this._partitionKey = documentCollection.PartitionKey.Paths.First();
+                }
+                
                 if (retry == maxRetries || dbResponse.StatusCode != HttpStatusCode.Created || collResponse.StatusCode == HttpStatusCode.Created)
                 {
                     break;  // Apparently some throttling logic returns HttpStatusCode.OK (not 429) when the collection wasn't created in a new DB.
