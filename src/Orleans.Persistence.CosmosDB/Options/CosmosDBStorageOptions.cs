@@ -1,9 +1,11 @@
+using System;
 using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Orleans.Runtime;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace Orleans.Persistence.CosmosDB
 {
@@ -12,6 +14,8 @@ namespace Orleans.Persistence.CosmosDB
         private const string ORLEANS_DB = "Orleans";
         internal const string ORLEANS_STORAGE_COLLECTION = "OrleansStorage";
         private const int ORLEANS_STORAGE_COLLECTION_THROUGHPUT = 400;
+        internal readonly Dictionary<string,Func<GrainReference,string>> CustomPartitionKeyBuilders
+            = new Dictionary<string, Func<GrainReference, string>>();
 
         [Redact]
         public string AccountKey { get; set; }
@@ -27,7 +31,7 @@ namespace Orleans.Persistence.CosmosDB
 
         [JsonConverter(typeof(StringEnumConverter))]
         public Protocol ConnectionProtocol { get; set; } = Protocol.Tcp;
-        
+
         public JsonSerializerSettings JsonSerializerSettings { get; set; }
 
         public bool UseFullAssemblyNames { get; set; } = true;
@@ -59,6 +63,24 @@ namespace Orleans.Persistence.CosmosDB
         /// Stage of silo lifecycle where storage should be initialized.  Storage must be initialized prior to use.
         /// </summary>
         public int InitStage { get; set; } = DEFAULT_INIT_STAGE;
+
+        /// <summary>
+        /// Allows usage of custom partition keys for each grain type. The key must be built based on the grain
+        /// reference as the partition must be known when reading the state.
+        /// </summary>
+        /// <param name="type">Graintype</param>
+        /// <param name="partitionKeyBuilder">Function for creating the partition key based on the GrainReference</param>
+        /// <returns>String used as partition key</returns>
+        public CosmosDBStorageOptions AddPartitionKeyBuilder(Type type, Func<GrainReference, string> partitionKeyBuilder)
+        {
+            if (type == null)
+                throw new ArgumentNullException(nameof(type));
+
+            CustomPartitionKeyBuilders.Add(type.FullName,partitionKeyBuilder);
+
+            return this;
+        }
+
         public const int DEFAULT_INIT_STAGE = ServiceLifecycleStage.ApplicationServices;
 
         // TODO: Consistency level for emulator (defaults to Session; https://docs.microsoft.com/en-us/azure/cosmos-db/local-emulator)
