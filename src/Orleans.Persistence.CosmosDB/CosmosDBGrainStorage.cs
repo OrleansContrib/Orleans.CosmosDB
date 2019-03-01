@@ -265,6 +265,13 @@ namespace Orleans.Persistence.CosmosDB
         {
             if (this._dbClient == null) throw new ArgumentException("GrainState collection not initialized.");
 
+            //indexing is not supported if cosmosDb is configured with custom partition key builders. For this to be
+            //supported the index should be updated from DirectStorageManagedIndexImpl class rather than implicit through
+            //write state.
+            var partitionKeyBuilders = this._options.CustomPartitionKeyBuilders?.Count ?? 0;
+            if (partitionKeyBuilders > 0)
+                throw new NotSupportedException("Indexing is not supported with custom partition key builders");
+
             var keyString = key.ToString();
             if (!IsNumericType(typeof(K)))
             {
