@@ -111,9 +111,7 @@ namespace Orleans.Persistence.CosmosDB
                             new ConnectionPolicy
                             {
                                 ConnectionMode = this._options.ConnectionMode,
-                                ConnectionProtocol = this._options.ConnectionProtocol,
-                                RequestTimeout = TimeSpan.FromSeconds(9),
-                                RetryOptions = new RetryOptions { }
+                                ConnectionProtocol = this._options.ConnectionProtocol
                             });
 
                 await this._dbClient.OpenAsync();
