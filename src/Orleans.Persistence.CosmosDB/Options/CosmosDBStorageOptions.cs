@@ -71,12 +71,9 @@ namespace Orleans.Persistence.CosmosDB
         /// <param name="type">Graintype</param>
         /// <param name="partitionKeyBuilder">Function for creating the partition key based on the GrainReference</param>
         /// <returns>String used as partition key</returns>
-        public CosmosDBStorageOptions AddPartitionKeyBuilder(Type type, Func<GrainReference, string> partitionKeyBuilder)
+        public CosmosDBStorageOptions AddPartitionKeyBuilder<T>(Func<GrainReference, string> partitionKeyBuilder) where T : class
         {
-            if (type == null)
-                throw new ArgumentNullException(nameof(type));
-
-            CustomPartitionKeyBuilders.Add(type.FullName,partitionKeyBuilder);
+            this.CustomPartitionKeyBuilders.Add(typeof(T).FullName,partitionKeyBuilder);
 
             return this;
         }
