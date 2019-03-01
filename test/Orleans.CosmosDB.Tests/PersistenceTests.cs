@@ -1,3 +1,4 @@
+using System;
 using Orleans.CosmosDB.Tests.Grains;
 using Orleans.Hosting;
 using Orleans.Persistence.CosmosDB;
@@ -42,6 +43,7 @@ namespace Orleans.CosmosDB.Tests
                         opt.DB = StorageDbName;
                         opt.StateFieldsToIndex.Add("NftIndexedInt");
                         opt.StateFieldsToIndex.Add("UserState.FtIndexedString");
+                        opt.AddPartitionKeyBuilder<TestCustomPartitionGrain>(reference => reference.GetPrimaryKey().ToString());
                     });
             }
         }
@@ -71,6 +73,36 @@ namespace Orleans.CosmosDB.Tests
             }
 
             await AssertAllTasksCompletedSuccessfullyAsync(tasks);
+        }
+
+        [Fact]
+        public async Task Custom_Partition_Test()
+        {
+            var guid = Guid.NewGuid();
+
+            var grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain> (guid);
+            await grain.Write(("Test Partition"));
+            await grain.Deactivate();
+
+            var storage = this._fixture.Silo.Services.GetServiceByName<IGrainStorage>(OrleansFixture.TEST_STORAGE) as CosmosDBGrainStorage;
+            IDocumentQuery<dynamic> query = storage._dbClient.CreateDocumentQuery(
+                UriFactory.CreateDocumentCollectionUri(StorageDbName, CosmosDBStorageOptions.ORLEANS_STORAGE_COLLECTION),
+                $"SELECT * FROM c WHERE c.PartitionKey = \"" + guid.ToString() + "\"",
+                new FeedOptions
+                {
+                    PopulateQueryMetrics = true,
+                    MaxItemCount = -1,
+                    MaxDegreeOfParallelism = -1,
+                    PartitionKey = new PartitionKey(guid.ToString())
+                }).AsDocumentQuery();
+            FeedResponse<dynamic> result = await query.ExecuteNextAsync();
+            Assert.Equal(1,result.Count);
+
+            var grain2 = this._fixture.Client.GetGrain<ITestCustomPartitionGrain> (guid);
+            var list = await grain2.Read();
+            Assert.Single(list);
+            Assert.Equal("Test Partition",list[0]);
+
         }
 
         [Fact]
