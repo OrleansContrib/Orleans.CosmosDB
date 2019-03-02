@@ -107,6 +107,9 @@ The example above use parts of the primary key for a grain which implements IGra
 
 For further details on partitioning in CosmosDB see https://docs.microsoft.com/en-us/azure/cosmos-db/partitioning-overview. 
 
+### Backwards compatibility
+The change will not affect existing systems. Configuring custom partition key builders will throw a BadGrainStorageConfigException stating incompatibility. To start using custom partition key builders the old documents must be updated with a /PartitionKey property where the value is set using the same functionality as the Func<GrainReference, string> delegate specified in options. Once all documents are updated the data must be migrated to a new CosmosDB collection using Azure Data Factory, CosmosDB Migration tool or custom code. 
+
 ***Do note that indexing with custom partition keys is not supported***
 
 # Contributions
