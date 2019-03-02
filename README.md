@@ -110,6 +110,9 @@ For further details on partitioning in CosmosDB see: https://docs.microsoft.com/
 ### Backwards compatibility
 The change will not affect existing systems. Configuring custom partition key builders for an existing system will throw a BadGrainStorageConfigException stating incompatibility. To start using custom partition key builders the old documents must be updated with a /PartitionKey property where the value is set using the same functionality as the Func<GrainReference, string> delegate specified in options. Once all documents are updated, the data must be migrated to a new CosmosDB collection using Azure Data Factory, CosmosDB Migration tool or custom code. 
 
+### Indexing
+The current indexing fork relies on CosmosDB stored procedures for lookup. As stored procedures must be executed against a specific partition, the use of custom partition key builders is not compatible with the Orleans indexing fork. 
+
 ***Do note that indexing with custom partition keys is not supported***
 
 # Contributions
