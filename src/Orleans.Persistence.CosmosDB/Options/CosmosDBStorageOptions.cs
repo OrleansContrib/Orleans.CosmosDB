@@ -68,9 +68,9 @@ namespace Orleans.Persistence.CosmosDB
         /// Allows usage of custom partition keys for each grain type. The key must be built based on the grain
         /// reference as the partition must be known when reading the state.
         /// </summary>
-        /// <param name="type">Graintype</param>
+        /// <typeparam name="T">Graintype</typeparam>
         /// <param name="partitionKeyBuilder">Function for creating the partition key based on the GrainReference</param>
-        /// <returns>String used as partition key</returns>
+        /// <returns>string used as partition key when reading and writing to CosmosDB</returns>
         public CosmosDBStorageOptions AddPartitionKeyBuilder<T>(Func<GrainReference, string> partitionKeyBuilder) where T : class
         {
             this.CustomPartitionKeyBuilders.Add(typeof(T).FullName,partitionKeyBuilder);
