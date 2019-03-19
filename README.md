@@ -104,9 +104,9 @@ If no IPartitionKeyProvider is used, the full name of the grain type will be use
 ```cs
 public class PrimaryKeyPartitionKeyProvider : IPartitionKeyProvider
 {
-    public string GetPartitionKey(string grainType, GrainReference grainReference)
-    {   
-        return grainReference.GetPrimaryKey().ToString();
+    public ValueTask<string> GetPartitionKey(string grainType, GrainReference grainReference) 
+    {
+        return new ValueTask<string>(grainReference.GetPrimaryKey().ToString());
     }
 }
 ``` 
