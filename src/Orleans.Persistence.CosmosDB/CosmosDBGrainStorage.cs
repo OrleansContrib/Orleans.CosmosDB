@@ -149,7 +149,7 @@ namespace Orleans.Persistence.CosmosDB
             if (this._dbClient == null) throw new ArgumentException("GrainState collection not initialized.");
 
             string id = GetKeyString(grainReference);
-            string partitionKey = BuildPartitionKey(grainType, grainReference);
+            string partitionKey = await BuildPartitionKey(grainType, grainReference);
 
             if (this._logger.IsEnabled(LogLevel.Trace)) this._logger.Trace(
                 "Reading: GrainType={0} Key={1} Grainid={2} from Collection={3} with PartitionKey={4}",
@@ -198,7 +198,7 @@ namespace Orleans.Persistence.CosmosDB
 
             string id = GetKeyString(grainReference);
 
-            string partitionKey = BuildPartitionKey(grainType, grainReference);
+            string partitionKey = await BuildPartitionKey(grainType, grainReference);
 
 
 
@@ -238,7 +238,7 @@ namespace Orleans.Persistence.CosmosDB
             if (this._dbClient == null) throw new ArgumentException("GrainState collection not initialized.");
 
             string id = GetKeyString(grainReference);
-            string partitionKey = BuildPartitionKey(grainType, grainReference);
+            string partitionKey = await BuildPartitionKey(grainType, grainReference);
             if (this._logger.IsEnabled(LogLevel.Trace)) this._logger.Trace(
                 "Clearing: GrainType={0} Key={1} Grainid={2} ETag={3} DeleteStateOnClear={4} from Collection={4} with PartitionKey {5}",
                 grainType, id, grainReference, grainState.ETag, this._options.DeleteStateOnClear, this._options.Collection, partitionKey);
@@ -329,7 +329,7 @@ namespace Orleans.Persistence.CosmosDB
         private const string KeyStringSeparator = "__";
         private string GetKeyString(GrainReference grainReference) => $"{this._serviceId}{KeyStringSeparator}{grainReference.ToKeyString()}";
         private string GetGrainReferenceString(string keyString) => keyString.Substring(keyString.IndexOf(KeyStringSeparator) + KeyStringSeparator.Length);
-        private string BuildPartitionKey(string grainType, GrainReference reference) =>
+        private ValueTask<string> BuildPartitionKey(string grainType, GrainReference reference) =>
             this._options.PartitionKeyProvider.GetPartitionKey(grainType, reference);
 
         private static bool IsNumericType(Type o)
