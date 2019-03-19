@@ -95,19 +95,31 @@ Great! Now you have Orleans configured to use Azure CosmosDB as the back storage
 ## Custom partition keys
 By default the grain type is used as partition key, however this limits the storage size for a single grain type as a single logical partition has an upper limit of 10 GB storage.
 
-It is possible to override the default partition key per grain type by congfiguring delegates on the CosmosDBStorageOptions. In order to prevet cross partition queries the partition key must be available to the client upon reading data, hence the delegate input is limited to the grainreference. The grain reference contains the grain id, with combination, and a type identifier.
+It is possible to override the default by implementing a custom IPartitionKeyProvider. The custom implementation must be provided to the `CosmosDBStorageOptions` configuration using the `PartitionKeyProvider` property.
 
+If no IPartitionKeyProvider is used, the full name of the grain type will be used as partition key. 
 
 ***Example***
 ```cs
-opt.AddPartitionKeyBuilder<SomeGrain>(reference
-                            => BitConverter.ToInt32(reference.GetPrimaryKey().ToByteArray(), 2).ToString());
+public class PrimaryKeyPartitionKeyProvider : IPartitionKeyProvider
+{
+    public string GetPartitionKey(string grainType, GrainReference grainReference)
+    {   
+        return grainReference.GetPrimaryKey().ToString();
+    }
+}
 ``` 
-The example above use parts of the primary key for a grain which implements IGrainWithGuidKey.
+The custom example above use the Primary key as partition key.
+
+In order to prevent cross partition queries the partition key must be available to the client upon reading data, hence the delegate input is limited to the graintype and grainreference. The grain reference contains the grain id, with combination, and a type identifier.
 
 For further details on partitioning in CosmosDB see https://docs.microsoft.com/en-us/azure/cosmos-db/partitioning-overview. 
 
-***Do note that indexing with custom partition keys is not supported***
+### Backwards compatibility
+The change will not affect existing systems. Configuring custom partition key builders for an existing system will throw a BadGrainStorageConfigException stating incompatibility. To start using custom partition key builders the old documents must be updated with a /PartitionKey property where the value is set using the same functionality as the Func<GrainReference, string> delegate specified in options. Once all documents are updated, the data must be migrated to a new CosmosDB collection using Azure Data Factory, CosmosDB Migration tool or custom code. 
+
+### Indexing
+The current indexing fork relies on CosmosDB stored procedures for lookup. As stored procedures must be executed against a specific partition, the use of custom partition key builders is not compatible with the Orleans indexing fork. 
 
 # Contributions
 PRs and feedback are **very** welcome!

@@ -6,6 +6,7 @@ using Newtonsoft.Json.Converters;
 using Orleans.Runtime;
 using System.Collections.Generic;
 using System.Diagnostics;
+using Orleans.Persistence.CosmosDB.Options;
 
 namespace Orleans.Persistence.CosmosDB
 {
@@ -14,8 +15,7 @@ namespace Orleans.Persistence.CosmosDB
         private const string ORLEANS_DB = "Orleans";
         internal const string ORLEANS_STORAGE_COLLECTION = "OrleansStorage";
         private const int ORLEANS_STORAGE_COLLECTION_THROUGHPUT = 400;
-        internal readonly Dictionary<string,Func<GrainReference,string>> CustomPartitionKeyBuilders
-            = new Dictionary<string, Func<GrainReference, string>>();
+       
 
         [Redact]
         public string AccountKey { get; set; }
@@ -65,18 +65,12 @@ namespace Orleans.Persistence.CosmosDB
         public int InitStage { get; set; } = DEFAULT_INIT_STAGE;
 
         /// <summary>
-        /// Allows usage of custom partition keys for each grain type. The key must be built based on the grain
-        /// reference as the partition must be known when reading the state.
+        /// Configurable provider for partition key usage 
         /// </summary>
         /// <param name="type">Graintype</param>
         /// <param name="partitionKeyBuilder">Function for creating the partition key based on the GrainReference</param>
         /// <returns>String used as partition key</returns>
-        public CosmosDBStorageOptions AddPartitionKeyBuilder<T>(Func<GrainReference, string> partitionKeyBuilder) where T : class
-        {
-            this.CustomPartitionKeyBuilders.Add(typeof(T).FullName,partitionKeyBuilder);
-
-            return this;
-        }
+        public IPartitionKeyProvider PartitionKeyProvider { get; set; } = new DefaultPartitionKeyProvider();
 
         public const int DEFAULT_INIT_STAGE = ServiceLifecycleStage.ApplicationServices;
 

@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Orleans.Configuration;
 using Orleans.Persistence.CosmosDB.Models;
+using Orleans.Persistence.CosmosDB.Options;
 using Orleans.Runtime;
 using Orleans.Serialization;
 using Orleans.Storage;
@@ -266,8 +267,7 @@ namespace Orleans.Persistence.CosmosDB
             //indexing is not supported if cosmosDb is configured with custom partition key builders. For this to be
             //supported the index should be updated from DirectStorageManagedIndexImpl class rather than implicit through
             //write state.
-            var partitionKeyBuilders = this._options.CustomPartitionKeyBuilders?.Count ?? 0;
-            if (partitionKeyBuilders > 0)
+           if (!(this._options.PartitionKeyProvider is DefaultPartitionKeyProvider))
                 throw new NotSupportedException("Indexing is not supported with custom partition key builders");
 
             var keyString = key.ToString();
@@ -329,16 +329,8 @@ namespace Orleans.Persistence.CosmosDB
         private const string KeyStringSeparator = "__";
         private string GetKeyString(GrainReference grainReference) => $"{this._serviceId}{KeyStringSeparator}{grainReference.ToKeyString()}";
         private string GetGrainReferenceString(string keyString) => keyString.Substring(keyString.IndexOf(KeyStringSeparator) + KeyStringSeparator.Length);
-        private string BuildPartitionKey(string grainType, GrainReference reference)
-        {
-            if (this._options.CustomPartitionKeyBuilders != null &&
-                this._options.CustomPartitionKeyBuilders.ContainsKey(grainType))
-                return this._options.CustomPartitionKeyBuilders[grainType].Invoke(reference);
-            else
-            {
-                return grainType;
-            }
-        }
+        private string BuildPartitionKey(string grainType, GrainReference reference) =>
+            this._options.PartitionKeyProvider.GetPartitionKey(grainType, reference);
 
         private static bool IsNumericType(Type o)
         {
@@ -401,9 +393,8 @@ namespace Orleans.Persistence.CosmosDB
                     var documentCollection =  (DocumentCollection)collResponse;
                     this._partitionKeyPath = documentCollection.PartitionKey.Paths.First();
                     if (this._partitionKeyPath == GRAINTYPE_PARTITION_KEY_PATH &&
-                        this._options.CustomPartitionKeyBuilders != null &&
-                        this._options.CustomPartitionKeyBuilders.Count > 0)
-                        throw new BadGrainStorageConfigException("Custom partition key builders not compatible with partition key path set to /GrainType");
+                        !(this._options.PartitionKeyProvider is DefaultPartitionKeyProvider))
+                        throw new BadGrainStorageConfigException("Custom partition key provider is not compatible with partition key path set to /GrainType");
                 }
 
                 if (retry == maxRetries || dbResponse.StatusCode != HttpStatusCode.Created || collResponse.StatusCode == HttpStatusCode.Created)
