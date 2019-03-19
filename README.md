@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <p align="center">
   <img src="https://github.com/dotnet/orleans/blob/gh-pages/assets/logo.png" alt="Orleans.CosmosDB" width="300px"> 
   <h1>Orleans CosmosDB Providers</h1>
@@ -109,7 +110,7 @@ public class PrimaryKeyPartitionKeyProvider : IPartitionKeyProvider
     }
 }
 ``` 
-The custom example above use the Primary key as partition key.
+The example above use the Primary key as partition key.
 
 In order to prevent cross partition queries the partition key must be available to the client upon reading data, hence the delegate input is limited to the graintype and grainreference. The grain reference contains the grain id, with combination, and a type identifier.
 
