@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Orleans.Configuration;
 using Orleans.Persistence.CosmosDB.Models;
+using Orleans.Persistence.CosmosDB.Options;
 using Orleans.Runtime;
 using Orleans.Serialization;
 using Orleans.Storage;
@@ -17,6 +18,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -28,11 +30,13 @@ namespace Orleans.Persistence.CosmosDB
     /// </summary>
     public class CosmosDBGrainStorage : IGrainStorage, ILifecycleParticipant<ISiloLifecycle>
     {
-        private const string PARTITION_KEY = "/GrainType";
+
         private const string WRITE_STATE_SPROC = "WriteState";
         private const string READ_STATE_SPROC = "ReadState";
         private const string CLEAR_STATE_SPROC = "ClearState";
         private const string LOOKUP_INDEX_SPROC = "LookupIndex";
+        private const string DEFAULT_PARTITION_KEY_PATH = "/PartitionKey";
+        private const string GRAINTYPE_PARTITION_KEY_PATH = "/GrainType";
 
         private readonly Dictionary<string, string> _sprocFiles;
 
@@ -45,6 +49,10 @@ namespace Orleans.Persistence.CosmosDB
         private readonly ITypeResolver _typeResolver;
         private readonly CosmosDBStorageOptions _options;
         internal DocumentClient _dbClient;  // internal for test
+
+
+        private string _partitionKeyPath = DEFAULT_PARTITION_KEY_PATH; //overwritten with old value for existing collections
+
         private IGrainReferenceConverter _grainReferenceConverter;
 
         private const HttpStatusCode TooManyRequests = (HttpStatusCode)429;
@@ -141,16 +149,17 @@ namespace Orleans.Persistence.CosmosDB
             if (this._dbClient == null) throw new ArgumentException("GrainState collection not initialized.");
 
             string id = GetKeyString(grainReference);
+            string partitionKey = await BuildPartitionKey(grainType, grainReference);
 
             if (this._logger.IsEnabled(LogLevel.Trace)) this._logger.Trace(
-                "Reading: GrainType={0} Key={1} Grainid={2} from Collection={3}",
-                grainType, id, grainReference, this._options.Collection);
+                "Reading: GrainType={0} Key={1} Grainid={2} from Collection={3} with PartitionKey={4}",
+                grainType, id, grainReference, this._options.Collection, partitionKey);
 
             try
             {
                 var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<GrainStateEntity>(
                         UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, READ_STATE_SPROC),
-                        new RequestOptions { PartitionKey = new PartitionKey(grainType) },
+                        new RequestOptions { PartitionKey = new PartitionKey(partitionKey) },
                         grainType, id)).ConfigureAwait(false);
 
                 if (spResponse.Response?.State != null)
@@ -189,9 +198,13 @@ namespace Orleans.Persistence.CosmosDB
 
             string id = GetKeyString(grainReference);
 
+            string partitionKey = await BuildPartitionKey(grainType, grainReference);
+
+
+
             if (this._logger.IsEnabled(LogLevel.Trace)) this._logger.Trace(
-                "Writing: GrainType={0} Key={1} Grainid={2} ETag={3} from Collection={4}",
-                grainType, id, grainReference, grainState.ETag, this._options.Collection);
+                "Writing: GrainType={0} Key={1} Grainid={2} ETag={3} from Collection={4} with PartitionKey={5}",
+                grainType, id, grainReference, grainState.ETag, this._options.Collection, partitionKey);
 
             try
             {
@@ -200,14 +213,15 @@ namespace Orleans.Persistence.CosmosDB
                     ETag = grainState.ETag,
                     Id = id,
                     GrainType = grainType,
-                    State = grainState.State
+                    State = grainState.State,
+                    PartitionKey = partitionKey
                 };
 
                 var entityString = JsonConvert.SerializeObject(entity, this._options.JsonSerializerSettings);
 
                 var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<string>(
                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, WRITE_STATE_SPROC),
-                       new RequestOptions { PartitionKey = new PartitionKey(grainType) },
+                       new RequestOptions { PartitionKey = new PartitionKey(partitionKey) },
                        entityString)).ConfigureAwait(false);
 
                 grainState.ETag = spResponse.Response;
@@ -224,16 +238,16 @@ namespace Orleans.Persistence.CosmosDB
             if (this._dbClient == null) throw new ArgumentException("GrainState collection not initialized.");
 
             string id = GetKeyString(grainReference);
-
+            string partitionKey = await BuildPartitionKey(grainType, grainReference);
             if (this._logger.IsEnabled(LogLevel.Trace)) this._logger.Trace(
-                "Clearing: GrainType={0} Key={1} Grainid={2} ETag={3} DeleteStateOnClear={4} from Collection={4}",
-                grainType, id, grainReference, grainState.ETag, this._options.DeleteStateOnClear, this._options.Collection);
+                "Clearing: GrainType={0} Key={1} Grainid={2} ETag={3} DeleteStateOnClear={4} from Collection={4} with PartitionKey {5}",
+                grainType, id, grainReference, grainState.ETag, this._options.DeleteStateOnClear, this._options.Collection, partitionKey);
 
             try
             {
                 var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<string>(
                         UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, CLEAR_STATE_SPROC),
-                        new RequestOptions { PartitionKey = new PartitionKey(grainType) },
+                        new RequestOptions { PartitionKey = new PartitionKey(partitionKey) },
                         grainType, id, grainState.ETag, this._options.DeleteStateOnClear)).ConfigureAwait(false);
 
                 grainState.ETag = spResponse.Response;
@@ -249,6 +263,12 @@ namespace Orleans.Persistence.CosmosDB
         public async Task<List<GrainReference>> LookupAsync<K>(string grainType, string indexedField, K key)
         {
             if (this._dbClient == null) throw new ArgumentException("GrainState collection not initialized.");
+
+            //indexing is not supported if cosmosDb is configured with custom partition key builders. For this to be
+            //supported the index should be updated from DirectStorageManagedIndexImpl class rather than implicit through
+            //write state.
+           if (!(this._options.PartitionKeyProvider is DefaultPartitionKeyProvider))
+                throw new NotSupportedException("Indexing is not supported with custom partition key builders");
 
             var keyString = key.ToString();
             if (!IsNumericType(typeof(K)))
@@ -283,6 +303,7 @@ namespace Orleans.Persistence.CosmosDB
             return Task.CompletedTask;
         }
 
+
         private static async Task<TResult> ExecuteWithRetries<TResult>(Func<Task<TResult>> clientFunc)
         {
             // From:  https://blogs.msdn.microsoft.com/bigdatasupport/2015/09/02/dealing-with-requestratetoolarge-errors-in-azure-documentdb-and-testing-performance/
@@ -308,6 +329,8 @@ namespace Orleans.Persistence.CosmosDB
         private const string KeyStringSeparator = "__";
         private string GetKeyString(GrainReference grainReference) => $"{this._serviceId}{KeyStringSeparator}{grainReference.ToKeyString()}";
         private string GetGrainReferenceString(string keyString) => keyString.Substring(keyString.IndexOf(KeyStringSeparator) + KeyStringSeparator.Length);
+        private ValueTask<string> BuildPartitionKey(string grainType, GrainReference reference) =>
+            this._options.PartitionKeyProvider.GetPartitionKey(grainType, reference);
 
         private static bool IsNumericType(Type o)
         {
@@ -338,7 +361,7 @@ namespace Orleans.Persistence.CosmosDB
             {
                 Id = this._options.Collection
             };
-            stateCollection.PartitionKey.Paths.Add(PARTITION_KEY);
+            stateCollection.PartitionKey.Paths.Add(DEFAULT_PARTITION_KEY_PATH);
 
             stateCollection.IndexingPolicy.IndexingMode = IndexingMode.Consistent;
             stateCollection.IndexingPolicy.IncludedPaths.Add(new IncludedPath { Path = "/*" });
@@ -361,10 +384,19 @@ namespace Orleans.Persistence.CosmosDB
                     stateCollection,
                     new RequestOptions
                     {
-                        PartitionKey = new PartitionKey(PARTITION_KEY),
+                        PartitionKey = new PartitionKey(DEFAULT_PARTITION_KEY_PATH),
                         ConsistencyLevel = this._options.GetConsistencyLevel(),
                         OfferThroughput = this._options.CollectionThroughput
                     });
+                if (collResponse.StatusCode == HttpStatusCode.OK || collResponse.StatusCode == HttpStatusCode.Created)
+                {
+                    var documentCollection =  (DocumentCollection)collResponse;
+                    this._partitionKeyPath = documentCollection.PartitionKey.Paths.First();
+                    if (this._partitionKeyPath == GRAINTYPE_PARTITION_KEY_PATH &&
+                        !(this._options.PartitionKeyProvider is DefaultPartitionKeyProvider))
+                        throw new BadGrainStorageConfigException("Custom partition key provider is not compatible with partition key path set to /GrainType");
+                }
+
                 if (retry == maxRetries || dbResponse.StatusCode != HttpStatusCode.Created || collResponse.StatusCode == HttpStatusCode.Created)
                 {
                     break;  // Apparently some throttling logic returns HttpStatusCode.OK (not 429) when the collection wasn't created in a new DB.

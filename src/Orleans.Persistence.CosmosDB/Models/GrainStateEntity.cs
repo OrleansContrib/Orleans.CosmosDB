@@ -18,5 +18,8 @@ namespace Orleans.Persistence.CosmosDB.Models
 
         [JsonProperty(ETAG_FIELD)]
         public string ETag { get; set; }
+
+        [JsonProperty(nameof(PartitionKey))]
+        public string PartitionKey { get; set; }
     }
 }
