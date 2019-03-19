@@ -48,6 +48,7 @@ namespace Orleans.Persistence.CosmosDB
         private readonly IGrainFactory _grainFactory;
         private readonly ITypeResolver _typeResolver;
         private readonly CosmosDBStorageOptions _options;
+        private readonly IPartitionKeyProvider _partitionKeyProvider;
         internal DocumentClient _dbClient;  // internal for test
 
 
@@ -58,11 +59,11 @@ namespace Orleans.Persistence.CosmosDB
         private const HttpStatusCode TooManyRequests = (HttpStatusCode)429;
 
         public CosmosDBGrainStorage(string name, CosmosDBStorageOptions options, SerializationManager serializationManager,
-            Providers.IProviderRuntime providerRuntime,
+            Providers.IProviderRuntime providerRuntime, IPartitionKeyProvider partitionKeyProvider,
             IOptions<ClusterOptions> clusterOptions, IGrainFactory grainFactory, ITypeResolver typeResolver, ILoggerFactory loggerFactory)
         {
             this._name = name;
-
+            this._partitionKeyProvider = partitionKeyProvider;
             this._loggerFactory = loggerFactory;
             var loggerName = $"{typeof(CosmosDBGrainStorage).FullName}.{name}";
             this._logger = loggerFactory.CreateLogger(loggerName);
@@ -267,7 +268,7 @@ namespace Orleans.Persistence.CosmosDB
             //indexing is not supported if cosmosDb is configured with custom partition key builders. For this to be
             //supported the index should be updated from DirectStorageManagedIndexImpl class rather than implicit through
             //write state.
-           if (!(this._options.PartitionKeyProvider is DefaultPartitionKeyProvider))
+            if (!(this._partitionKeyProvider is DefaultPartitionKeyProvider))
                 throw new NotSupportedException("Indexing is not supported with custom partition key builders");
 
             var keyString = key.ToString();
@@ -330,7 +331,7 @@ namespace Orleans.Persistence.CosmosDB
         private string GetKeyString(GrainReference grainReference) => $"{this._serviceId}{KeyStringSeparator}{grainReference.ToKeyString()}";
         private string GetGrainReferenceString(string keyString) => keyString.Substring(keyString.IndexOf(KeyStringSeparator) + KeyStringSeparator.Length);
         private ValueTask<string> BuildPartitionKey(string grainType, GrainReference reference) =>
-            this._options.PartitionKeyProvider.GetPartitionKey(grainType, reference);
+            this._partitionKeyProvider.GetPartitionKey(grainType, reference);
 
         private static bool IsNumericType(Type o)
         {
@@ -390,10 +391,10 @@ namespace Orleans.Persistence.CosmosDB
                     });
                 if (collResponse.StatusCode == HttpStatusCode.OK || collResponse.StatusCode == HttpStatusCode.Created)
                 {
-                    var documentCollection =  (DocumentCollection)collResponse;
+                    var documentCollection = (DocumentCollection)collResponse;
                     this._partitionKeyPath = documentCollection.PartitionKey.Paths.First();
                     if (this._partitionKeyPath == GRAINTYPE_PARTITION_KEY_PATH &&
-                        !(this._options.PartitionKeyProvider is DefaultPartitionKeyProvider))
+                        !(this._partitionKeyProvider is DefaultPartitionKeyProvider))
                         throw new BadGrainStorageConfigException("Custom partition key provider is not compatible with partition key path set to /GrainType");
                 }
 

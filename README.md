@@ -93,12 +93,18 @@ var client = new ClientBuilder()
 
 Great! Now you have Orleans configured to use Azure CosmosDB as the back storage for its providers!
 
-## Custom partition keys
+## Custom partition keys for storage provider
 By default the grain type is used as partition key, however this limits the storage size for a single grain type as a single logical partition has an upper limit of 10 GB storage.
 
-It is possible to override the default by implementing a custom IPartitionKeyProvider. The custom implementation must be provided to the `CosmosDBStorageOptions` configuration using the `PartitionKeyProvider` property.
+It is possible to override the default by implementing a custom `IPartitionKeyProvider`. The custom implementation of `IPartitionKeyProvider` can be registered by using the dependency injection usual methods like:
 
-If no IPartitionKeyProvider is used, the full name of the grain type will be used as partition key. 
+```
+services.AddSingleton<IPartitionKeyProvider, MyCustomPKProvider>();
+```
+
+There is also some overloads of `AddCosmosDBGrainStorage` and `AddCosmosDBGrainStorageAsDefault` that allow you to pass the `IPartitionKeyProvider` implementation.
+
+If no `IPartitionKeyProvider` is used, the default one will be uses which use full name of the grain type will be used as partition key. 
 
 ***Example***
 ```cs

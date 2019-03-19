@@ -44,7 +44,7 @@ namespace Orleans.CosmosDB.Tests
                 OrleansFixture.GetAccountInfo(out this.AccountEndpoint, out this.AccountKey);
 
                 return builder
-                    .AddCosmosDBGrainStorage(OrleansFixture.TEST_STORAGE, opt =>
+                    .AddCosmosDBGrainStorage<PrimaryKeyPartitionKeyProvider>(OrleansFixture.TEST_STORAGE, opt =>
                     {
                         opt.AccountEndpoint = this.AccountEndpoint;
                         opt.AccountKey = this.AccountKey;
@@ -53,7 +53,6 @@ namespace Orleans.CosmosDB.Tests
                         opt.AutoUpdateStoredProcedures = true;
                         opt.CanCreateResources = true;
                         opt.DB = StorageDbName;
-                        opt.PartitionKeyProvider = new PrimaryKeyPartitionKeyProvider();
                     });
             }
         }
@@ -90,7 +89,7 @@ namespace Orleans.CosmosDB.Tests
         {
             var guid = Guid.NewGuid();
 
-            var grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain> (guid);
+            var grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
             await grain.Write(("Test Partition"));
             await grain.Deactivate();
 
@@ -106,12 +105,12 @@ namespace Orleans.CosmosDB.Tests
                     PartitionKey = new PartitionKey(guid.ToString())
                 }).AsDocumentQuery();
             FeedResponse<dynamic> result = await query.ExecuteNextAsync();
-            Assert.Equal(1,result.Count);
+            Assert.Equal(1, result.Count);
 
-            var grain2 = this._fixture.Client.GetGrain<ITestCustomPartitionGrain> (guid);
+            var grain2 = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
             var list = await grain2.Read();
             Assert.Single(list);
-            Assert.Equal("Test Partition",list[0]);
+            Assert.Equal("Test Partition", list[0]);
 
         }
     }
