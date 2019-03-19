@@ -15,7 +15,7 @@ namespace Orleans.Persistence.CosmosDB
         private const string ORLEANS_DB = "Orleans";
         internal const string ORLEANS_STORAGE_COLLECTION = "OrleansStorage";
         private const int ORLEANS_STORAGE_COLLECTION_THROUGHPUT = 400;
-       
+
 
         [Redact]
         public string AccountKey { get; set; }
@@ -63,14 +63,6 @@ namespace Orleans.Persistence.CosmosDB
         /// Stage of silo lifecycle where storage should be initialized.  Storage must be initialized prior to use.
         /// </summary>
         public int InitStage { get; set; } = DEFAULT_INIT_STAGE;
-
-        /// <summary>
-        /// Configurable provider for partition key usage 
-        /// </summary>
-        /// <param name="type">Graintype</param>
-        /// <param name="partitionKeyBuilder">Function for creating the partition key based on the GrainReference</param>
-        /// <returns>String used as partition key</returns>
-        public IPartitionKeyProvider PartitionKeyProvider { get; set; } = new DefaultPartitionKeyProvider();
 
         public const int DEFAULT_INIT_STAGE = ServiceLifecycleStage.ApplicationServices;
 
