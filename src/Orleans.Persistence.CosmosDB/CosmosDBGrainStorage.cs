@@ -201,8 +201,6 @@ namespace Orleans.Persistence.CosmosDB
 
             string partitionKey = await BuildPartitionKey(grainType, grainReference);
 
-
-
             if (this._logger.IsEnabled(LogLevel.Trace)) this._logger.Trace(
                 "Writing: GrainType={0} Key={1} Grainid={2} ETag={3} from Collection={4} with PartitionKey={5}",
                 grainType, id, grainReference, grainState.ETag, this._options.Collection, partitionKey);
