@@ -354,7 +354,14 @@ namespace Orleans.Persistence.CosmosDB
 
         private async Task TryCreateCosmosDBResources()
         {
-            var dbResponse = await this._dbClient.CreateDatabaseIfNotExistsAsync(new Database { Id = this._options.DB });
+            RequestOptions databaseOptions = new RequestOptions
+            {
+                OfferThroughput =
+                    this._options.DatabaseThroughput >= 400
+                    ? (int?)this._options.DatabaseThroughput
+                    : null
+            };
+            var dbResponse = await this._dbClient.CreateDatabaseIfNotExistsAsync(new Database { Id = this._options.DB }, databaseOptions);
 
             var stateCollection = new DocumentCollection
             {
@@ -385,8 +392,12 @@ namespace Orleans.Persistence.CosmosDB
                     {
                         PartitionKey = new PartitionKey(DEFAULT_PARTITION_KEY_PATH),
                         ConsistencyLevel = this._options.GetConsistencyLevel(),
-                        OfferThroughput = this._options.CollectionThroughput
+                        OfferThroughput =
+                            this._options.CollectionThroughput >= 400
+                            ? (int?)this._options.CollectionThroughput
+                            : null
                     });
+
                 if (collResponse.StatusCode == HttpStatusCode.OK || collResponse.StatusCode == HttpStatusCode.Created)
                 {
                     var documentCollection = (DocumentCollection)collResponse;
