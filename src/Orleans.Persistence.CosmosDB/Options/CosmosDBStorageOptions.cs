@@ -15,13 +15,21 @@ namespace Orleans.Persistence.CosmosDB
         private const string ORLEANS_DB = "Orleans";
         internal const string ORLEANS_STORAGE_COLLECTION = "OrleansStorage";
         private const int ORLEANS_STORAGE_COLLECTION_THROUGHPUT = 400;
-
+        private const int ORLEANS_DATABASE_THROUGHPUT = 0;
 
         [Redact]
         public string AccountKey { get; set; }
         public string AccountEndpoint { get; set; }
         public string DB { get; set; } = ORLEANS_DB;
+
+        /// <summary>
+        /// Database configured throughput, if set to 0 it will not be configured and collection throughput must be set. See https://docs.microsoft.com/en-us/azure/cosmos-db/set-throughput 
+        /// </summary>
+        public int DatabaseThroughput { get; set; } = ORLEANS_STORAGE_COLLECTION_THROUGHPUT;
         public string Collection { get; set; } = ORLEANS_STORAGE_COLLECTION;
+        /// <summary>
+        /// RU units for collection, can be set to 0 if throughput is specified on database level. See https://docs.microsoft.com/en-us/azure/cosmos-db/set-throughput
+        /// </summary>
         public int CollectionThroughput { get; set; } = ORLEANS_STORAGE_COLLECTION_THROUGHPUT;
         public bool CanCreateResources { get; set; }
         public bool DeleteStateOnClear { get; set; }
@@ -99,9 +107,9 @@ namespace Orleans.Persistence.CosmosDB
                 throw new OrleansConfigurationException(
                     $"Configuration for CosmosDBStorage {this.name} is invalid. {nameof(this.options.Collection)} is not valid.");
 
-            if (this.options.CollectionThroughput == 0)
+            if (this.options.CollectionThroughput < 400 && this.options.DatabaseThroughput < 400)
                 throw new OrleansConfigurationException(
-                    $"Configuration for CosmosDBStorage {this.name} is invalid. {nameof(this.options.CollectionThroughput)} is not valid.");
+                    $"Configuration for CosmosDBStorage {this.name} is invalid. Either {nameof(this.options.DatabaseThroughput)} or {nameof(this.options.CollectionThroughput)} must exceed 400.");
         }
     }
 }
