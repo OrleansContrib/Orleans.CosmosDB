@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 <p align="center">
   <img src="https://github.com/dotnet/orleans/blob/gh-pages/assets/logo.png" alt="Orleans.CosmosDB" width="300px"> 
   <h1>Orleans CosmosDB Providers</h1>
@@ -123,7 +122,7 @@ In order to prevent cross partition queries the partition key must be available 
 For further details on partitioning in CosmosDB see https://docs.microsoft.com/en-us/azure/cosmos-db/partitioning-overview. 
 
 ### Backwards compatibility
-The change will not affect existing systems. Configuring custom partition key builders for an existing system will throw a BadGrainStorageConfigException stating incompatibility. To start using custom partition key builders the old documents must be updated with a /PartitionKey property where the value is set using the same functionality as the Func<GrainReference, string> delegate specified in options. Once all documents are updated, the data must be migrated to a new CosmosDB collection using Azure Data Factory, CosmosDB Migration tool or custom code. 
+The change will not affect existing systems. Configuring a custom `IPartitionKeyProvider` for an existing system will throw a BadGrainStorageConfigException stating incompatibility. To start using a custom partition key provider the old documents must be updated with a `/PartitionKey` property where the value is set using the same functionality as in the `GetPartitionKey` implementation in the custom `IPartitionKeyProvider`. Once all documents are updated, the data must be migrated to a new CosmosDB collection using Azure Data Factory, CosmosDB Migration tool or custom code with colletions PartitionKey set to `PartitionKey`
 
 ### Indexing
 The current indexing fork relies on CosmosDB stored procedures for lookup. As stored procedures must be executed against a specific partition, the use of custom partition key builders is not compatible with the Orleans indexing fork. 
