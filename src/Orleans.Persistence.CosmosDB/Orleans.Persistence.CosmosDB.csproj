@@ -24,10 +24,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Remove="Sprocs\ClearState.js" />
     <None Remove="Sprocs\LookupIndex.js" />
-    <None Remove="Sprocs\ReadState.js" />
-    <None Remove="Sprocs\WriteState.js" />
   </ItemGroup>
 
   <ItemGroup>
@@ -35,16 +32,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Sprocs\ClearState.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </EmbeddedResource>
     <EmbeddedResource Include="Sprocs\LookupIndex.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Sprocs\ReadState.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Sprocs\WriteState.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </EmbeddedResource>
   </ItemGroup>

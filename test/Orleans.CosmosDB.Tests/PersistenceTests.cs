@@ -167,5 +167,24 @@ namespace Orleans.CosmosDB.Tests
 
             await Assert.ThrowsAsync<SerializationException>(() => grain.Write("Second test"));
         }
+
+        [Fact]
+        public async Task ClearState()
+        {
+            var guid = Guid.NewGuid();
+
+            var grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
+            await grain.Write("Test Partition");
+            await grain.ClearState();
+            await grain.Deactivate();
+
+            grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
+
+            var list = await grain.Read();
+
+            
+            Assert.Empty(list);
+
+        }
     }
 }
