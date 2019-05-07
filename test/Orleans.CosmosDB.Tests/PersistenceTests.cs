@@ -206,6 +206,17 @@ namespace Orleans.CosmosDB.Tests
             Assert.Single(list);
             Assert.Equal("Can we write when read state is null", list.First());
         }
+
+        [Fact]
+        public async Task ClearState_BeforeWrite()
+        {
+            var guid = Guid.NewGuid();
+
+            var grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
+            await grain.ClearState();
+
+
+        }
     }
 
 }

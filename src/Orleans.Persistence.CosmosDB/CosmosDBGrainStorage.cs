@@ -260,9 +260,14 @@ namespace Orleans.Persistence.CosmosDB
 
             try {
                 if (this._options.DeleteStateOnClear)
+                {
+                    if (string.IsNullOrWhiteSpace(grainState.ETag))
+                        return;  //state not written
+
                     await ExecuteWithRetries(() => this._dbClient.DeleteDocumentAsync(
                         UriFactory.CreateDocumentUri(this._options.DB, this._options.Collection, id),
                         requestOptions));
+                }
                 else
                 {
                     var entity = new GrainStateEntity
@@ -275,9 +280,14 @@ namespace Orleans.Persistence.CosmosDB
                     };
 
                     var response = await ExecuteWithRetries(() =>
-                            this._dbClient.ReplaceDocumentAsync(
-                                UriFactory.CreateDocumentUri(this._options.DB, this._options.Collection, entity.Id),
-                                entity, requestOptions)).ConfigureAwait(false);
+                        string.IsNullOrWhiteSpace(grainState.ETag)
+                        ? this._dbClient.CreateDocumentAsync(
+                            UriFactory.CreateDocumentCollectionUri(this._options.DB, this._options.Collection),
+                            entity,
+                            new RequestOptions {PartitionKey = new PartitionKey(partitionKey)})
+                        : this._dbClient.ReplaceDocumentAsync(
+                            UriFactory.CreateDocumentUri(this._options.DB, this._options.Collection, entity.Id),
+                            entity, requestOptions)).ConfigureAwait(false);
                     grainState.ETag = response.Resource.ETag;
                 }
             }
