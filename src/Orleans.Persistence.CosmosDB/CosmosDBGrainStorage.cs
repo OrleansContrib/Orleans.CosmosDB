@@ -164,6 +164,7 @@ namespace Orleans.Persistence.CosmosDB
                 {
                     // Default state, to prevent null reference exceptions when the grain is first activated
                     grainState.State = Activator.CreateInstance(grainState.State.GetType());
+                    grainState.ETag = doc.Document?.ETag;
                 }
             }
             catch (DocumentClientException dce)
@@ -232,7 +233,7 @@ namespace Orleans.Persistence.CosmosDB
                             entity, requestOptions)).ConfigureAwait(false);
                     grainState.ETag = response.Resource.ETag;
                 }
-                  
+
             }
             catch (Exception exc)
             {

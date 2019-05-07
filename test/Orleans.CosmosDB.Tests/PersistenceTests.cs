@@ -182,9 +182,30 @@ namespace Orleans.CosmosDB.Tests
 
             var list = await grain.Read();
 
-            
+
             Assert.Empty(list);
 
         }
+
+        [Fact]
+        public async Task EtagSetWhenReadingGrainAfterClearingState()
+        {
+            var guid = Guid.NewGuid();
+
+            var grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
+            await grain.Write("Test Partition");
+            await grain.ClearState();
+            await grain.Deactivate();
+
+            grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
+            await grain.Write("Can we write when read state is null");
+            await grain.Deactivate();
+
+            grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
+            var list = await grain.Read();
+            Assert.Single(list);
+            Assert.Equal("Can we write when read state is null", list.First());
+        }
     }
+
 }
