@@ -127,5 +127,38 @@ The change will not affect existing systems. Configuring a custom `IPartitionKey
 ### Indexing
 The current indexing fork relies on CosmosDB stored procedures for lookup. As stored procedures must be executed against a specific partition, the use of custom partition key builders is not compatible with the Orleans indexing fork. 
 
+## Stream Provider
+
+To use the Stream Provider you need to register it on your `ISiloBuilder`:
+
+```csharp
+.AddCosmosDBStreaming(config => 
+    config.AddStream("<provider name>", configure =>
+    {
+        // The information on FeedCollectionInfo property is related to the database that will be monitored by the change feed
+        configure.FeedCollectionInfo = new DocumentCollectionInfo
+        {
+            Uri = new Uri("<CosmosDB URI>"),
+            MasterKey = "<CosmosDB Master Key>" ,
+            DatabaseName = "<CosmosDB Database>",
+            CollectionName = "<CosmosDB Collection>" 
+        };
+
+        // The information on LeaseCollectionInfo is related to the CosmosDB Change Feed lease collection
+        configure.LeaseCollectionInfo = new DocumentCollectionInfo
+        {
+            Uri = new Uri("<CosmosDB Change Feed Lease URI>"),
+            MasterKey = "<CosmosDB Change Feed Lease Master Key>" ,
+            DatabaseName = "<CosmosDB Change Feed Lease Database>",
+            CollectionName = "<CosmosDB Change Feed Lease Collection>" 
+        };
+    }, typeof(PartitionKeyBasedStreamMapper)))
+
+```
+
+Then on your grain, you need to implement `IAsyncObserver<Document>` in order to receive the document that has changed and published thru Cosmos DB Change Feed.
+
+**Note**: A special thanks for Roger Creyke (@creyke) and [Odds-Bods](https://odds-bods.com/) for sponsored the work on this stream provider. Thank you! :)
+
 # Contributions
 PRs and feedback are **very** welcome!
