@@ -17,7 +17,7 @@ using static Orleans.CosmosDB.Tests.IndexTests;
 
 namespace Orleans.CosmosDB.Tests
 {
- 
+
 
     public class IndexTests : IClassFixture<StorageIndexFixture>
     {
@@ -29,7 +29,7 @@ namespace Orleans.CosmosDB.Tests
             internal string AccountEndpoint;
             internal string AccountKey;
 
-            protected override ISiloHostBuilder PreBuild(ISiloHostBuilder builder)
+            protected override ISiloBuilder PreBuild(ISiloBuilder builder)
             {
                 OrleansFixture.GetAccountInfo(out this.AccountEndpoint, out this.AccountKey);
 
@@ -87,7 +87,7 @@ namespace Orleans.CosmosDB.Tests
 
             await AssertAllTasksCompletedSuccessfullyAsync(tasks);
 
-            var storage = this._fixture.Silo.Services.GetServiceByName<IGrainStorage>(OrleansFixture.TEST_STORAGE) as CosmosDBGrainStorage;
+            var storage = this._fixture.Host.Services.GetServiceByName<IGrainStorage>(OrleansFixture.TEST_STORAGE) as CosmosDBGrainStorage;
             string grainTypeName() => typeof(TestIndexedPropertiesGrain).FullName;
 
             // Use the Client GrainReferenceConverter here to obtain a grain in OutsideClientRuntime.

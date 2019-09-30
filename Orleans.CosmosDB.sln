@@ -25,6 +25,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Orleans.Persistence.CosmosD
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Orleans.Reminders.CosmosDB", "src\Orleans.Reminders.CosmosDB\Orleans.Reminders.CosmosDB.csproj", "{E82D600B-2C44-4458-AB68-BCC25DE16631}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Orleans.Streaming.CosmosDB", "src\Orleans.Streaming.CosmosDB\Orleans.Streaming.CosmosDB.csproj", "{97AC434A-A072-44E4-B8F3-CCFD87A94F08}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -83,6 +85,18 @@ Global
 		{E82D600B-2C44-4458-AB68-BCC25DE16631}.Release|x64.Build.0 = Release|Any CPU
 		{E82D600B-2C44-4458-AB68-BCC25DE16631}.Release|x86.ActiveCfg = Release|Any CPU
 		{E82D600B-2C44-4458-AB68-BCC25DE16631}.Release|x86.Build.0 = Release|Any CPU
+		{97AC434A-A072-44E4-B8F3-CCFD87A94F08}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{97AC434A-A072-44E4-B8F3-CCFD87A94F08}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{97AC434A-A072-44E4-B8F3-CCFD87A94F08}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{97AC434A-A072-44E4-B8F3-CCFD87A94F08}.Debug|x64.Build.0 = Debug|Any CPU
+		{97AC434A-A072-44E4-B8F3-CCFD87A94F08}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{97AC434A-A072-44E4-B8F3-CCFD87A94F08}.Debug|x86.Build.0 = Debug|Any CPU
+		{97AC434A-A072-44E4-B8F3-CCFD87A94F08}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{97AC434A-A072-44E4-B8F3-CCFD87A94F08}.Release|Any CPU.Build.0 = Release|Any CPU
+		{97AC434A-A072-44E4-B8F3-CCFD87A94F08}.Release|x64.ActiveCfg = Release|Any CPU
+		{97AC434A-A072-44E4-B8F3-CCFD87A94F08}.Release|x64.Build.0 = Release|Any CPU
+		{97AC434A-A072-44E4-B8F3-CCFD87A94F08}.Release|x86.ActiveCfg = Release|Any CPU
+		{97AC434A-A072-44E4-B8F3-CCFD87A94F08}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -92,6 +106,7 @@ Global
 		{E388AE16-3DE3-4181-AF2F-B880A78584AB} = {12BE367B-569F-4C2E-AC15-876709C119D1}
 		{1262090F-EDB2-47F1-AC69-48195CDFFBE6} = {12BE367B-569F-4C2E-AC15-876709C119D1}
 		{E82D600B-2C44-4458-AB68-BCC25DE16631} = {12BE367B-569F-4C2E-AC15-876709C119D1}
+		{97AC434A-A072-44E4-B8F3-CCFD87A94F08} = {12BE367B-569F-4C2E-AC15-876709C119D1}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {9740C707-08EC-41C2-A199-A861D618296C}

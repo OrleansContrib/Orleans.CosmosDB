@@ -58,8 +58,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Azure.DocumentDB.Core" Version="2.2.3" />
-    <PackageReference Include="Microsoft.Orleans.OrleansRuntime" Version="2.3.0" />
+    <PackageReference Include="Microsoft.Azure.DocumentDB.Core" Version="2.7.0" />
+    <PackageReference Include="Microsoft.Orleans.OrleansRuntime" Version="3.0.0-beta1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -72,10 +72,6 @@
     <None Update="Sprocs\WriteState.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Properties\" />
   </ItemGroup>
 
 </Project>
