@@ -28,6 +28,8 @@ From Package Manager:
 
 > PS> Install-Package Orleans.Reminders.CosmosDB -prerelease
 
+> PS> Install-Package Orleans.Streaming.CosmosDB -prerelease
+
 .Net CLI:
 
 > \# dotnet add package Orleans.Clustering.CosmosDB -prerelease
@@ -36,6 +38,8 @@ From Package Manager:
 
 > \# dotnet add package Orleans.Reminders.CosmosDB -prerelease
 
+> \# dotnet add package Orleans.Streaming.CosmosDB -prerelease
+
 Paket: 
 
 > \# paket add Orleans.Clustering.CosmosDB -prerelease
@@ -43,6 +47,8 @@ Paket:
 > \# paket add Orleans.Persistence.CosmosDB -prerelease
 
 > \# paket add Orleans.Reminders.CosmosDB -prerelease
+
+> \# paket add Orleans.Streaming.CosmosDB -prerelease
 
 # Configuration
 
