@@ -164,7 +164,5 @@ To use the Stream Provider you need to register it on your `ISiloBuilder`:
 
 Then on your grain, you need to implement `IAsyncObserver<Document>` in order to receive the document that has changed and published thru Cosmos DB Change Feed.
 
-**Note**: A special thanks for Roger Creyke (@creyke) and [Odds-Bods](https://odds-bods.com/) for sponsored the work on this stream provider. Thank you! :)
-
 # Contributions
 PRs and feedback are **very** welcome!
