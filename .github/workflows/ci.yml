@@ -8,7 +8,7 @@ on:
 jobs:
   build:
 
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v1
@@ -18,9 +18,9 @@ jobs:
         dotnet-version: 3.0.100
     # - name: Azure Cosmos Emulator
     #   uses: galvesribeiro/AzureCosmosAction@v1.0.0
-    - name: Start CosmosDB Emulator
-      run: .\StartEmulator.cmd
+    # - name: Start CosmosDB Emulator
+    #   run: .\StartEmulator.cmd
     - name: Build
       run: dotnet build --configuration Release
-    - name: Test
-      run: dotnet test --configuration Release --no-build
+    # - name: Test
+    #   run: dotnet test --configuration Release --no-build
