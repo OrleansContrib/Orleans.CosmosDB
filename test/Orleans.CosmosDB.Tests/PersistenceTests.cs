@@ -149,7 +149,7 @@ namespace Orleans.CosmosDB.Tests
             await grain.Read();
 
             //change etag
-            var storage = this._fixture.Silo.Services.GetServiceByName<IGrainStorage>(OrleansFixture.TEST_STORAGE) as CosmosDBGrainStorage;
+            var storage = this._fixture.Host.Services.GetServiceByName<IGrainStorage>(OrleansFixture.TEST_STORAGE) as CosmosDBGrainStorage;
             IDocumentQuery<dynamic> query = storage._dbClient.CreateDocumentQuery(
                UriFactory.CreateDocumentCollectionUri(StorageDbName, CosmosDBStorageOptions.ORLEANS_STORAGE_COLLECTION),
                $"SELECT * FROM c WHERE c.PartitionKey = \"" + guid.ToString() + "\"",

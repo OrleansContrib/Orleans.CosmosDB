@@ -28,15 +28,13 @@ namespace Orleans.Streaming.CosmosDB
         private const char KEY_SEPARATOR = '-';
         private readonly ILogger _logger;
         private readonly TimeSpan _latencyAnnouncementWindow;
-        private readonly CosmosDBStreamOptions _options;
         private IStreamProvider _streamProvider;
-        private TimeSpan _consumeLatency;
         private DateTime? _lastLatencyOutput;
 
         public ChangeFeedDispatcher(ILoggerFactory loggerFactory, IOptions<CosmosDBStreamOptions> options)
         {
             this._logger = loggerFactory.CreateLogger<ChangeFeedDispatcher>();
-            this._options = options.Value;
+            this._latencyAnnouncementWindow = options.Value.MaxLatencyThreshold;
         }
 
         public override Task OnActivateAsync()
@@ -52,9 +50,9 @@ namespace Orleans.Streaming.CosmosDB
 
             if (_lastLatencyOutput is null || DateTime.UtcNow - _lastLatencyOutput >= _latencyAnnouncementWindow)
             {
-                if (consumeLatency > this._options.MaxLatencyThreshold)
+                if (consumeLatency > _latencyAnnouncementWindow)
                 {
-                    _logger.LogWarning($"Cosmos consume latency estimated at '{consumeLatency}' exceeded the maximum allowed of '{this._options.MaxLatencyThreshold}'.");
+                    _logger.LogWarning($"Cosmos consume latency estimated at '{consumeLatency}' exceeded the maximum allowed of '{_latencyAnnouncementWindow}'.");
                     _lastLatencyOutput = DateTime.UtcNow;
                 }
                 this._logger.LogInformation($"Cosmos consume latency estimated at '{consumeLatency}'.");
