@@ -15,6 +15,7 @@ using Microsoft.Azure.Documents.Client;
 using Microsoft.Azure.Documents.Linq;
 using Microsoft.Azure.Documents;
 using Orleans.Persistence.CosmosDB.Options;
+using System.Runtime.Serialization;
 
 namespace Orleans.CosmosDB.Tests
 {
@@ -90,7 +91,7 @@ namespace Orleans.CosmosDB.Tests
             var guid = Guid.NewGuid();
 
             var grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
-            await grain.Write(("Test Partition"));
+            await grain.Write("Test Partition");
             await grain.Deactivate();
 
             var storage = this._fixture.Silo.Services.GetServiceByName<IGrainStorage>(OrleansFixture.TEST_STORAGE) as CosmosDBGrainStorage;
@@ -113,5 +114,109 @@ namespace Orleans.CosmosDB.Tests
             Assert.Equal("Test Partition", list[0]);
 
         }
+
+        [Fact]
+        public async Task UpdateDocument()
+        {
+            var guid = Guid.NewGuid();
+
+            var grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
+            await grain.Write("Test Partition");
+            await grain.Deactivate();
+
+
+            grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
+            await grain.Write("Second test");
+            await grain.Deactivate();
+
+            grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
+            var list = await grain.Read();
+
+            Assert.Equal("Second test", list[1]);
+        }
+
+        [Fact]
+        public async Task UpdateDocument_FailsOnEtagMismatch()
+        {
+            var guid = Guid.NewGuid();
+
+            var grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
+            await grain.Write("Test Partition");
+            await grain.Deactivate();
+
+            //activate grain and read state with etag.
+            grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
+            await grain.Read();
+
+            //change etag
+            var storage = this._fixture.Silo.Services.GetServiceByName<IGrainStorage>(OrleansFixture.TEST_STORAGE) as CosmosDBGrainStorage;
+            IDocumentQuery<dynamic> query = storage._dbClient.CreateDocumentQuery(
+               UriFactory.CreateDocumentCollectionUri(StorageDbName, CosmosDBStorageOptions.ORLEANS_STORAGE_COLLECTION),
+               $"SELECT * FROM c WHERE c.PartitionKey = \"" + guid.ToString() + "\"",
+               new FeedOptions
+               {
+                   PopulateQueryMetrics = true,
+                   MaxItemCount = -1,
+                   MaxDegreeOfParallelism = -1,
+                   PartitionKey = new PartitionKey(guid.ToString())
+               }).AsDocumentQuery();
+            FeedResponse<dynamic> result = await query.ExecuteNextAsync();
+            Document doc = result.Single();
+            doc.SetPropertyValue("forceUpdate", "test");
+            var response = await storage._dbClient.ReplaceDocumentAsync(doc, new RequestOptions { PartitionKey = new PartitionKey(guid.ToString()) });
+
+            await Assert.ThrowsAsync<SerializationException>(() => grain.Write("Second test"));
+        }
+
+        [Fact]
+        public async Task ClearState()
+        {
+            var guid = Guid.NewGuid();
+
+            var grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
+            await grain.Write("Test Partition");
+            await grain.ClearState();
+            await grain.Deactivate();
+
+            grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
+
+            var list = await grain.Read();
+
+
+            Assert.Empty(list);
+
+        }
+
+        [Fact]
+        public async Task EtagSetWhenReadingGrainAfterClearingState()
+        {
+            var guid = Guid.NewGuid();
+
+            var grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
+            await grain.Write("Test Partition");
+            await grain.ClearState();
+            await grain.Deactivate();
+
+            grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
+            await grain.Write("Can we write when read state is null");
+            await grain.Deactivate();
+
+            grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
+            var list = await grain.Read();
+            Assert.Single(list);
+            Assert.Equal("Can we write when read state is null", list.First());
+        }
+
+        [Fact]
+        public async Task ClearState_BeforeWrite()
+        {
+            var guid = Guid.NewGuid();
+
+            var grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
+            await grain.ClearState();
+
+
+        }
     }
+
 }

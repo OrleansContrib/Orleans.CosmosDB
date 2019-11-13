@@ -10,7 +10,10 @@ namespace Orleans.CosmosDB.Tests.Grains
         Task<List<string>> Read();
 
         Task Deactivate();
+
+        Task ClearState();
     }
+
 
     [StorageProvider(ProviderName = OrleansFixture.TEST_STORAGE)]
     public class TestCustomPartitionGrain : Grain<TestState>, ITestCustomPartitionGrain
@@ -31,5 +34,7 @@ namespace Orleans.CosmosDB.Tests.Grains
             this.DeactivateOnIdle();
             return Task.CompletedTask;
         }
+
+        public Task ClearState() => this.ClearStateAsync();
     }
 }
