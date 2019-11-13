@@ -27,7 +27,7 @@ namespace Orleans.CosmosDB.Tests
             internal string AccountEndpoint;
             internal string AccountKey;
 
-            protected override ISiloHostBuilder PreBuild(ISiloHostBuilder builder)
+            protected override ISiloBuilder PreBuild(ISiloBuilder builder)
             {
                 OrleansFixture.GetAccountInfo(out this.AccountEndpoint, out this.AccountKey);
 
@@ -67,7 +67,7 @@ namespace Orleans.CosmosDB.Tests
         [Fact]
         public async Task VerifyDbThroughput()
         {
-            var storage = this._fixture.Silo.Services.GetServiceByName<IGrainStorage>(OrleansFixture.TEST_STORAGE) as CosmosDBGrainStorage;
+            var storage = this._fixture.Host.Services.GetServiceByName<IGrainStorage>(OrleansFixture.TEST_STORAGE) as CosmosDBGrainStorage;
             var dbClient = storage._dbClient;
             var offers = dbClient.CreateOfferQuery().ToList();
 
@@ -80,7 +80,7 @@ namespace Orleans.CosmosDB.Tests
         [Fact]
         public async Task VerifyCollectionWithoutOffer()
         {
-            var storage = this._fixture.Silo.Services.GetServiceByName<IGrainStorage>(OrleansFixture.TEST_STORAGE) as CosmosDBGrainStorage;
+            var storage = this._fixture.Host.Services.GetServiceByName<IGrainStorage>(OrleansFixture.TEST_STORAGE) as CosmosDBGrainStorage;
             var dbClient = storage._dbClient;
             var offers = dbClient.CreateOfferQuery().ToList();
 
@@ -93,7 +93,7 @@ namespace Orleans.CosmosDB.Tests
         [Fact]
         public async Task VerifiyCollectionWithOfferInDbWithOffer()
         {
-            var storage = this._fixture.Silo.Services.GetServiceByName<IGrainStorage>(OrleansFixture.TEST_STORAGE) as CosmosDBGrainStorage;
+            var storage = this._fixture.Host.Services.GetServiceByName<IGrainStorage>(OrleansFixture.TEST_STORAGE) as CosmosDBGrainStorage;
             var dbClient = storage._dbClient;
             var offers = dbClient.CreateOfferQuery().ToList();
 

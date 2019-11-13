@@ -14,7 +14,7 @@ namespace Orleans.CosmosDB.Tests
         {
             private const string DatabaseName = "OrleansRemindersTest";
 
-            protected override ISiloHostBuilder PreBuild(ISiloHostBuilder builder)
+            protected override ISiloBuilder PreBuild(ISiloBuilder builder)
             {
                 OrleansFixture.GetAccountInfo(out var accountEndpoint, out var accountKey);
 

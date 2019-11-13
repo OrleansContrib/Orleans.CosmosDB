@@ -40,7 +40,7 @@ namespace Orleans.CosmosDB.Tests
             internal string AccountEndpoint;
             internal string AccountKey;
 
-            protected override ISiloHostBuilder PreBuild(ISiloHostBuilder builder)
+            protected override ISiloBuilder PreBuild(ISiloBuilder builder)
             {
                 OrleansFixture.GetAccountInfo(out this.AccountEndpoint, out this.AccountKey);
 
@@ -94,7 +94,7 @@ namespace Orleans.CosmosDB.Tests
             await grain.Write("Test Partition");
             await grain.Deactivate();
 
-            var storage = this._fixture.Silo.Services.GetServiceByName<IGrainStorage>(OrleansFixture.TEST_STORAGE) as CosmosDBGrainStorage;
+            var storage = this._fixture.Host.Services.GetServiceByName<IGrainStorage>(OrleansFixture.TEST_STORAGE) as CosmosDBGrainStorage;
             IDocumentQuery<dynamic> query = storage._dbClient.CreateDocumentQuery(
                 UriFactory.CreateDocumentCollectionUri(StorageDbName, CosmosDBStorageOptions.ORLEANS_STORAGE_COLLECTION),
                 $"SELECT * FROM c WHERE c.PartitionKey = \"" + guid.ToString() + "\"",

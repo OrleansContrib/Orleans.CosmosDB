@@ -31,6 +31,27 @@ namespace Orleans.Hosting
             });
         }
 
+        public static ISiloBuilder UseCosmosDBMembership(this ISiloBuilder builder,
+           Action<CosmosDBClusteringOptions> configureOptions)
+        {
+            return builder.ConfigureServices(services => services.UseCosmosDBMembership(configureOptions));
+        }
+
+        public static ISiloBuilder UseCosmosDBMembership(this ISiloBuilder builder,
+            Action<OptionsBuilder<CosmosDBClusteringOptions>> configureOptions)
+        {
+            return builder.ConfigureServices(services => services.UseCosmosDBMembership(configureOptions));
+        }
+
+        public static ISiloBuilder UseCosmosDBMembership(this ISiloBuilder builder)
+        {
+            return builder.ConfigureServices(services =>
+            {
+                services.AddOptions<CosmosDBClusteringOptions>();
+                services.AddSingleton<IMembershipTable, CosmosDBMembershipTable>();
+            });
+        }
+
         public static IClientBuilder UseCosmosDBGatewayListProvider(this IClientBuilder builder, Action<CosmosDBGatewayOptions> configureOptions)
         {
             return builder.ConfigureServices(services => services.UseCosmosDBGatewayListProvider(configureOptions));

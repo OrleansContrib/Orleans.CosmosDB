@@ -29,6 +29,24 @@ namespace Orleans.Hosting
         /// <summary>
         /// Adds reminder storage backed by Azure CosmosDB.
         /// </summary>
+        /// <param name="builder">
+        /// The builder.
+        /// </param>
+        /// <param name="configure">
+        /// The delegate used to configure the reminder store.
+        /// </param>
+        /// <returns>
+        /// The provided <see cref="ISiloBuilder"/>, for chaining.
+        /// </returns>
+        public static ISiloBuilder UseCosmosDBReminderService(this ISiloBuilder builder, Action<CosmosDBReminderStorageOptions> configure)
+        {
+            builder.ConfigureServices(services => services.UseCosmosDBReminderService(configure));
+            return builder;
+        }
+
+        /// <summary>
+        /// Adds reminder storage backed by Azure CosmosDB.
+        /// </summary>
         /// <param name="services">
         /// The service collection.
         /// </param>

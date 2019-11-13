@@ -1,19 +1,17 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json.Linq;
 using Orleans.Configuration;
 using Orleans.Hosting;
-using Orleans.Runtime;
-using Orleans.Runtime.Configuration;
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Net;
 using System.Threading;
 
 namespace Orleans.CosmosDB.Tests
 {
     public class OrleansFixture : IDisposable
     {
-        public ISiloHost Silo { get; }
+        public IHost Host { get; }
         public IClusterClient Client { get; }
 
         private const string ClusterId = "TESTCLUSTER";
@@ -29,45 +27,28 @@ namespace Orleans.CosmosDB.Tests
             var portInc = Interlocked.Increment(ref portUniquifier);
             var siloPort = EndpointOptions.DEFAULT_SILO_PORT + portInc;
             var gatewayPort = EndpointOptions.DEFAULT_GATEWAY_PORT + portInc;
-            ClusterConfiguration clusterConfig = ClusterConfiguration.LocalhostPrimarySilo(siloPort, gatewayPort);
-            var configDefaults = clusterConfig.Defaults;
-            var siloAddress = clusterConfig.PrimaryNode.Address;
-
-            var builder = new SiloHostBuilder();
-            var silo = PreBuild(builder)
-                .Configure<ClusterOptions>(options =>
+            var silo = new HostBuilder()
+                .UseOrleans(b =>
                 {
-                    options.ClusterId = ClusterId;
-                    options.ServiceId = serviceId;
-                })
-                .UseDevelopmentClustering(options => options.PrimarySiloEndpoint = clusterConfig.PrimaryNode)
-                .ConfigureEndpoints(siloAddress, siloPort, gatewayPort)
-                //.UseConfiguration(clusterConfig)
-                .ConfigureApplicationParts(pm => pm.AddApplicationPart(typeof(PersistenceTests).Assembly))
-                .Build();
+                    b.UseLocalhostClustering();
+                    b.ConfigureEndpoints(siloPort, gatewayPort);
+                    b.Configure<ClusterOptions>(options =>
+                    {
+                        options.ClusterId = ClusterId;
+                        options.ServiceId = serviceId;
+                    });
+                    b.ConfigureApplicationParts(pm => pm.AddApplicationPart(typeof(PersistenceTests).Assembly));
+                    PreBuild(b);
+                }).Build();
+
             silo.StartAsync().Wait();
-            this.Silo = silo;
 
-            //clientConfig.FallbackSerializationProvider = typeof(ILBasedSerializer).GetTypeInfo();
+            this.Host = silo;
 
-            ClientConfiguration clientConfig = ClientConfiguration.LocalhostSilo();
-            var client = new ClientBuilder()
-                //.UseConfiguration(clientConfig)
-                .Configure<ClusterOptions>(options =>
-                {
-                    options.ClusterId = ClusterId;
-                    options.ServiceId = serviceId;
-                })
-                .UseStaticClustering(options => options.Gateways = new List<Uri> { new IPEndPoint(siloAddress, gatewayPort).ToGatewayUri() })
-                .ConfigureApplicationParts(pm => pm.AddApplicationPart(typeof(PersistenceTests).Assembly))
-                .Build();
-
-            client.Connect().Wait();
-
-            this.Client = client;
+            this.Client = this.Host.Services.GetRequiredService<IClusterClient>();
         }
 
-        protected virtual ISiloHostBuilder PreBuild(ISiloHostBuilder builder) { return builder; }
+        protected virtual ISiloBuilder PreBuild(ISiloBuilder builder) { return builder; }
 
         public const string TEST_STORAGE = "TEST_STORAGE_PROVIDER";
 
@@ -109,7 +90,7 @@ namespace Orleans.CosmosDB.Tests
         public void Dispose()
         {
             this.Client.Close().Wait();
-            this.Silo.StopAsync().Wait();
+            this.Host.StopAsync().Wait();
         }
     }
 }

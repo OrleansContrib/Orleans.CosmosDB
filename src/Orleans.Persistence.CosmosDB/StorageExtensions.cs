@@ -14,6 +14,123 @@ namespace Orleans.Hosting
 {
     public static class StorageExtensions
     {
+        /// <summary>
+        /// Configure silo to use Azure CosmosDB storage as the default grain storage using a custom Partition Key Provider.
+        /// </summary>
+        public static ISiloBuilder AddCosmosDBGrainStorageAsDefault<TPartitionKeyProvider>(this ISiloBuilder builder, Action<CosmosDBStorageOptions> configureOptions) where TPartitionKeyProvider : class, IPartitionKeyProvider
+        {
+            return builder.AddCosmosDBGrainStorage<TPartitionKeyProvider>(ProviderConstants.DEFAULT_STORAGE_PROVIDER_NAME, configureOptions);
+        }
+
+        /// <summary>
+        /// Configure silo to use Azure CosmosDB storage for grain storage using a custom Partition Key Provider.
+        /// </summary>
+        public static ISiloBuilder AddCosmosDBGrainStorage<TPartitionKeyProvider>(this ISiloBuilder builder, string name, Action<CosmosDBStorageOptions> configureOptions) where TPartitionKeyProvider : class, IPartitionKeyProvider
+        {
+            return builder.ConfigureServices(services =>
+            {
+                services.TryAddSingleton<IPartitionKeyProvider, TPartitionKeyProvider>();
+                services.AddCosmosDBGrainStorage(name, configureOptions);
+            });
+        }
+
+        /// <summary>
+        /// Configure silo to use Azure CosmosDB storage as the default grain storage using a custom Partition Key Provider.
+        /// </summary>
+        public static ISiloBuilder AddCosmosDBGrainStorageAsDefault(this ISiloBuilder builder, Action<CosmosDBStorageOptions> configureOptions, Type customPartitionKeyProviderType)
+        {
+            return builder.AddCosmosDBGrainStorage(ProviderConstants.DEFAULT_STORAGE_PROVIDER_NAME, configureOptions, customPartitionKeyProviderType);
+        }
+
+        /// <summary>
+        /// Configure silo to use Azure CosmosDB storage for grain storage using a custom Partition Key Provider.
+        /// </summary>
+        public static ISiloBuilder AddCosmosDBGrainStorage(this ISiloBuilder builder, string name, Action<CosmosDBStorageOptions> configureOptions, Type customPartitionKeyProviderType)
+        {
+            return builder.ConfigureServices(services =>
+            {
+                if (customPartitionKeyProviderType != null)
+                {
+                    services.TryAddSingleton(typeof(IPartitionKeyProvider), customPartitionKeyProviderType);
+                }
+                services.AddCosmosDBGrainStorage(name, configureOptions);
+            });
+        }
+
+        /// <summary>
+        /// Configure silo to use Azure CosmosDB storage as the default grain storage.
+        /// </summary>
+        public static ISiloBuilder AddCosmosDBGrainStorageAsDefault(this ISiloBuilder builder, Action<CosmosDBStorageOptions> configureOptions)
+        {
+            return builder.AddCosmosDBGrainStorage(ProviderConstants.DEFAULT_STORAGE_PROVIDER_NAME, configureOptions);
+        }
+
+        /// <summary>
+        /// Configure silo to use Azure CosmosDB storage for grain storage.
+        /// </summary>
+        public static ISiloBuilder AddCosmosDBGrainStorage(this ISiloBuilder builder, string name, Action<CosmosDBStorageOptions> configureOptions)
+        {
+            return builder.ConfigureServices(services => services.AddCosmosDBGrainStorage(name, configureOptions));
+        }
+
+        /// <summary>
+        /// Configure silo to use Azure CosmosDB storage as the default grain storage using a custom Partition Key Provider.
+        /// </summary>
+        public static ISiloBuilder AddCosmosDBGrainStorageAsDefault<TPartitionKeyProvider>(this ISiloBuilder builder, Action<OptionsBuilder<CosmosDBStorageOptions>> configureOptions = null) where TPartitionKeyProvider : class, IPartitionKeyProvider
+        {
+            return builder.AddCosmosDBGrainStorage<TPartitionKeyProvider>(ProviderConstants.DEFAULT_STORAGE_PROVIDER_NAME, configureOptions);
+        }
+
+        /// <summary>
+        /// Configure silo to use Azure CosmosDB storage for grain storage using a custom Partition Key Provider.
+        /// </summary>
+        public static ISiloBuilder AddCosmosDBGrainStorage<TPartitionKeyProvider>(this ISiloBuilder builder, string name, Action<OptionsBuilder<CosmosDBStorageOptions>> configureOptions = null) where TPartitionKeyProvider : class, IPartitionKeyProvider
+        {
+            return builder.ConfigureServices(services =>
+            {
+                services.TryAddSingleton<IPartitionKeyProvider, TPartitionKeyProvider>();
+                services.AddCosmosDBGrainStorage(name, configureOptions);
+            });
+        }
+
+        /// <summary>
+        /// Configure silo to use Azure CosmosDB storage as the default grain storage using a custom Partition Key Provider.
+        /// </summary>
+        public static ISiloBuilder AddCosmosDBGrainStorageAsDefault(this ISiloBuilder builder, Type customPartitionKeyProviderType, Action<OptionsBuilder<CosmosDBStorageOptions>> configureOptions = null)
+        {
+            return builder.AddCosmosDBGrainStorage(ProviderConstants.DEFAULT_STORAGE_PROVIDER_NAME, customPartitionKeyProviderType, configureOptions);
+        }
+
+        /// <summary>
+        /// Configure silo to use Azure CosmosDB storage for grain storage using a custom Partition Key Provider.
+        /// </summary>
+        public static ISiloBuilder AddCosmosDBGrainStorage(this ISiloBuilder builder, string name, Type customPartitionKeyProviderType, Action<OptionsBuilder<CosmosDBStorageOptions>> configureOptions = null)
+        {
+            return builder.ConfigureServices(services =>
+            {
+                if (customPartitionKeyProviderType != null)
+                {
+                    services.TryAddSingleton(typeof(IPartitionKeyProvider), customPartitionKeyProviderType);
+                }
+                services.AddCosmosDBGrainStorage(name, configureOptions);
+            });
+        }
+
+        /// <summary>
+        /// Configure silo to use Azure CosmosDB storage as the default grain storage.
+        /// </summary>
+        public static ISiloBuilder AddCosmosDBGrainStorageAsDefault(this ISiloBuilder builder, Action<OptionsBuilder<CosmosDBStorageOptions>> configureOptions = null)
+        {
+            return builder.AddCosmosDBGrainStorage(ProviderConstants.DEFAULT_STORAGE_PROVIDER_NAME, configureOptions);
+        }
+
+        /// <summary>
+        /// Configure silo to use Azure CosmosDB storage for grain storage.
+        /// </summary>
+        public static ISiloBuilder AddCosmosDBGrainStorage(this ISiloBuilder builder, string name, Action<OptionsBuilder<CosmosDBStorageOptions>> configureOptions = null)
+        {
+            return builder.ConfigureServices(services => services.AddCosmosDBGrainStorage(name, configureOptions));
+        }
 
         /// <summary>
         /// Configure silo to use Azure CosmosDB storage as the default grain storage using a custom Partition Key Provider.
