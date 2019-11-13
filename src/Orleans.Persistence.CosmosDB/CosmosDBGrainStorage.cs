@@ -68,7 +68,7 @@ namespace Orleans.Persistence.CosmosDB
             this._grainFactory = grainFactory;
             this._typeResolver = typeResolver;
             this._serviceId = clusterOptions.Value.ServiceId;
-            this._grainReferenceConverter = (IGrainReferenceConverter)providerRuntime.ServiceProvider.GetService(typeof(IGrainReferenceConverter));
+            this._grainReferenceConverter = providerRuntime.ServiceProvider.GetRequiredService<IGrainReferenceConverter>();
 
             this._sprocFiles = new Dictionary<string, string>
             {

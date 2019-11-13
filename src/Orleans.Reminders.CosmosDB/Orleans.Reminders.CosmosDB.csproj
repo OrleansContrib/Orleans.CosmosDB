@@ -23,54 +23,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Remove="Sprocs\DeleteRow.js" />
-    <None Remove="Sprocs\DeleteRows.js" />
-    <None Remove="Sprocs\ReadRangeRows.js" />
-    <None Remove="Sprocs\ReadRow.js" />
-    <None Remove="Sprocs\ReadRows.js" />
-    <None Remove="Sprocs\UpsertRow.js" />
-  </ItemGroup>
-
-  <ItemGroup>
     <Compile Include="..\AssemblyInfo.cs" Link="AssemblyInfo.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="Sprocs\DeleteRow.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Sprocs\DeleteRows.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Sprocs\ReadRangeRows.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Sprocs\ReadRow.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Sprocs\ReadRows.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Sprocs\UpsertRow.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Azure.DocumentDB.Core" Version="2.9.0" />
     <PackageReference Include="Microsoft.Orleans.OrleansRuntime" Version="3.0.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Update="Sprocs\ClearState.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="Sprocs\ReadState.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="Sprocs\WriteState.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
   </ItemGroup>
 
 </Project>

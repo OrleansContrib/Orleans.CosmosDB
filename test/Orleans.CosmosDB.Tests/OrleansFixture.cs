@@ -1,15 +1,18 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using Orleans.Configuration;
 using Orleans.Hosting;
 using System;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
+using Xunit;
 
 namespace Orleans.CosmosDB.Tests
 {
-    public class OrleansFixture : IDisposable
+    public class OrleansFixture : IAsyncLifetime
     {
         public IHost Host { get; }
         public IClusterClient Client { get; }
@@ -23,11 +26,15 @@ namespace Orleans.CosmosDB.Tests
         {
             string serviceId = Guid.NewGuid().ToString();   // This is required by some tests; Reminders will parse it as a GUID.
 
-            //siloConfig.Globals.FallbackSerializationProvider = typeof(ILBasedSerializer).GetTypeInfo();
             var portInc = Interlocked.Increment(ref portUniquifier);
             var siloPort = EndpointOptions.DEFAULT_SILO_PORT + portInc;
             var gatewayPort = EndpointOptions.DEFAULT_GATEWAY_PORT + portInc;
             var silo = new HostBuilder()
+                .UseConsoleLifetime()
+                .ConfigureLogging((context, loggingBuilder) =>
+                {
+                    loggingBuilder.AddConsole();
+                })
                 .UseOrleans(b =>
                 {
                     b.UseLocalhostClustering();
@@ -41,8 +48,6 @@ namespace Orleans.CosmosDB.Tests
                     PreBuild(b);
                 }).Build();
 
-            silo.StartAsync().Wait();
-
             this.Host = silo;
 
             this.Client = this.Host.Services.GetRequiredService<IClusterClient>();
@@ -55,7 +60,7 @@ namespace Orleans.CosmosDB.Tests
         internal static void GetAccountInfo(out string accountEndpoint, out string accountKey)
         {
             // Default to emulator
-            accountEndpoint = "https://localhost:8081";
+            accountEndpoint = "https://GUTO-WIN-VM.local:8081";
             accountKey = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==";
 
             if (GetFileInCurrentOrParentDir("CosmosDBTestSecrets.json", out string secretsFile))
@@ -87,10 +92,8 @@ namespace Orleans.CosmosDB.Tests
             return false;
         }
 
-        public void Dispose()
-        {
-            this.Client.Close().Wait();
-            this.Host.StopAsync().Wait();
-        }
+        public Task InitializeAsync() => this.Host.StartAsync();
+
+        public Task DisposeAsync() => this.Host.StopAsync();
     }
 }
