@@ -11,6 +11,7 @@ namespace Orleans.Clustering.CosmosDB
         private const string ORLEANS_CLUSTER_COLLECTION = "OrleansCluster";
         private const int ORLEANS_CLUSTER_COLLECTION_THROUGHPUT = 400;
 
+        public DocumentClient Client { get; set; }
         public string AccountEndpoint { get; set; }
         [Redact]
         public string AccountKey { get; set; }
@@ -37,6 +38,6 @@ namespace Orleans.Clustering.CosmosDB
         public bool DropDatabaseOnInit { get; set; }
 
         // TODO: Consistency level for emulator (defaults to Session; https://docs.microsoft.com/en-us/azure/cosmos-db/local-emulator)
-        internal ConsistencyLevel? GetConsistencyLevel() => this.AccountEndpoint.Contains("localhost") ? (ConsistencyLevel?)ConsistencyLevel.Session : null;
+        internal ConsistencyLevel? GetConsistencyLevel() => !string.IsNullOrWhiteSpace(this.AccountEndpoint) && this.AccountEndpoint.Contains("localhost") ? (ConsistencyLevel?)ConsistencyLevel.Session : null;
     }
 }

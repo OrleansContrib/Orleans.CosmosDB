@@ -356,11 +356,6 @@ namespace Orleans.Persistence.CosmosDB
                     return reminders;
                 }).ConfigureAwait(false);
 
-                var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<GrainStateEntity[]>(
-                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, LOOKUP_INDEX_SPROC),
-                        new RequestOptions { PartitionKey = new PartitionKey(grainType) },
-                        grainType, indexedField, keyString)).ConfigureAwait(false);
-
                 return response.Select(entity => this._grainReferenceConverter.GetGrainFromKeyString(GetGrainReferenceString(entity.Id))).ToList();
             }
             catch (Exception exc)
