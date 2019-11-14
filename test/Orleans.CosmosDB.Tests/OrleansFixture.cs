@@ -30,7 +30,6 @@ namespace Orleans.CosmosDB.Tests
             var siloPort = EndpointOptions.DEFAULT_SILO_PORT + portInc;
             var gatewayPort = EndpointOptions.DEFAULT_GATEWAY_PORT + portInc;
             var silo = new HostBuilder()
-                .UseConsoleLifetime()
                 .ConfigureLogging((context, loggingBuilder) =>
                 {
                     loggingBuilder.AddConsole();
@@ -94,6 +93,13 @@ namespace Orleans.CosmosDB.Tests
 
         public Task InitializeAsync() => this.Host.StartAsync();
 
-        public Task DisposeAsync() => this.Host.StopAsync();
+        public Task DisposeAsync()
+        {
+            try
+            {
+                return this.Host.StopAsync();
+            }
+            catch { return Task.CompletedTask; }
+        }
     }
 }

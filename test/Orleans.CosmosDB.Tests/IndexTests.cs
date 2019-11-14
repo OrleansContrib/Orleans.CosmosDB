@@ -40,7 +40,6 @@ namespace Orleans.CosmosDB.Tests
                         opt.AccountKey = this.AccountKey;
                         opt.ConnectionMode = ConnectionMode.Gateway;
                         opt.DropDatabaseOnInit = true;
-                        opt.AutoUpdateStoredProcedures = true;
                         opt.CanCreateResources = true;
                         opt.DB = StorageDbName;
                         opt.StateFieldsToIndex.Add("NftIndexedInt");

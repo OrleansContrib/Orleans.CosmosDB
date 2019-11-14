@@ -23,17 +23,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Remove="Sprocs\LookupIndex.js" />
-  </ItemGroup>
-
-  <ItemGroup>
     <Compile Include="..\AssemblyInfo.cs" Link="AssemblyInfo.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="Sprocs\LookupIndex.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>

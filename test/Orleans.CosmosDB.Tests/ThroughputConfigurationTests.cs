@@ -13,6 +13,7 @@ using static Orleans.CosmosDB.Tests.ThroughputConfigurationTests;
 // For Index coverage CreateDocumentQuery
 using Microsoft.Azure.Documents.Client;
 using Microsoft.Azure.Documents;
+using System.Net.Http;
 
 namespace Orleans.CosmosDB.Tests
 {
@@ -31,14 +32,18 @@ namespace Orleans.CosmosDB.Tests
             {
                 OrleansFixture.GetAccountInfo(out this.AccountEndpoint, out this.AccountKey);
 
+                var httpHandler = new HttpClientHandler()
+                {
+                    ServerCertificateCustomValidationCallback = (req, cert, chain, errors) => true
+                };
+
+                var dbClient = new DocumentClient(new Uri(this.AccountEndpoint), this.AccountKey, httpHandler, new ConnectionPolicy { ConnectionMode = ConnectionMode.Gateway, ConnectionProtocol = Protocol.Https });
+
                 return builder
                     .AddCosmosDBGrainStorage(OrleansFixture.TEST_STORAGE, opt =>
                     {
-                        opt.AccountEndpoint = this.AccountEndpoint;
-                        opt.AccountKey = this.AccountKey;
-                        opt.ConnectionMode = ConnectionMode.Gateway;
+                        opt.Client = dbClient;
                         opt.DropDatabaseOnInit = true;
-                        opt.AutoUpdateStoredProcedures = true;
                         opt.CanCreateResources = true;
                         opt.DB = DatabaseName;
                         opt.DatabaseThroughput = 1000;
@@ -47,11 +52,8 @@ namespace Orleans.CosmosDB.Tests
                     })
                     .AddCosmosDBGrainStorage("Second", opt =>
                     {
-                        opt.AccountEndpoint = this.AccountEndpoint;
-                        opt.AccountKey = this.AccountKey;
-                        opt.ConnectionMode = ConnectionMode.Gateway;
+                        opt.Client = dbClient;
                         opt.DropDatabaseOnInit = true;
-                        opt.AutoUpdateStoredProcedures = true;
                         opt.CanCreateResources = true;
                         opt.DB = DatabaseName;
                         opt.DatabaseThroughput = 1000;

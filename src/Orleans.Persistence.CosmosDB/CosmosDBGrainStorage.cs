@@ -1,10 +1,10 @@
 using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
+using Microsoft.Azure.Documents.Linq;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using Orleans.Configuration;
 using Orleans.Persistence.CosmosDB.Models;
 using Orleans.Persistence.CosmosDB.Options;
@@ -14,11 +14,8 @@ using Orleans.Storage;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Net;
-using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -102,12 +99,19 @@ namespace Orleans.Persistence.CosmosDB
 
                 this._logger.LogInformation($"Azure Cosmos DB Grain Storage {this._name} is initializing: {initMsg}");
 
-                this._dbClient = new DocumentClient(new Uri(this._options.AccountEndpoint), this._options.AccountKey,
+                if (this._options.Client != null)
+                {
+                    this._dbClient = this._options.Client;
+                }
+                else
+                {
+                    this._dbClient = new DocumentClient(new Uri(this._options.AccountEndpoint), this._options.AccountKey,
                             new ConnectionPolicy
                             {
                                 ConnectionMode = this._options.ConnectionMode,
                                 ConnectionProtocol = this._options.ConnectionProtocol
                             });
+                }
 
                 await this._dbClient.OpenAsync();
 
@@ -119,11 +123,6 @@ namespace Orleans.Persistence.CosmosDB
                     }
 
                     await TryCreateCosmosDBResources();
-
-                    if (this._options.AutoUpdateStoredProcedures)
-                    {
-                        await UpdateStoredProcedures();
-                    }
                 }
 
                 stopWatch.Stop();
@@ -151,7 +150,7 @@ namespace Orleans.Persistence.CosmosDB
 
             try
             {
-                var doc = await ExecuteWithRetries(async() => await this._dbClient.ReadDocumentAsync<GrainStateEntity>(
+                var doc = await ExecuteWithRetries(async () => await this._dbClient.ReadDocumentAsync<GrainStateEntity>(
                     UriFactory.CreateDocumentUri(this._options.DB, this._options.Collection, id),
                     new RequestOptions { PartitionKey = new PartitionKey(partitionKey) })).ConfigureAwait(false);
 
@@ -198,6 +197,8 @@ namespace Orleans.Persistence.CosmosDB
                 "Writing: GrainType={0} Key={1} Grainid={2} ETag={3} from Collection={4} with PartitionKey={5}",
                 grainType, id, grainReference, grainState.ETag, this._options.Collection, partitionKey);
 
+            ResourceResponse<Document> response = null;
+
             try
             {
                 var entity = new GrainStateEntity
@@ -209,17 +210,17 @@ namespace Orleans.Persistence.CosmosDB
                     PartitionKey = partitionKey
                 };
 
-
                 if (string.IsNullOrWhiteSpace(grainState.ETag))
                 {
-                    var response =  await ExecuteWithRetries(() => this._dbClient.CreateDocumentAsync(
-                        UriFactory.CreateDocumentCollectionUri(this._options.DB, this._options.Collection),
-                        entity,
-                        new RequestOptions { PartitionKey = new PartitionKey(partitionKey) },
-                        true)).ConfigureAwait(false);
+                    response = await ExecuteWithRetries(() => this._dbClient.CreateDocumentAsync(
+                       UriFactory.CreateDocumentCollectionUri(this._options.DB, this._options.Collection),
+                       entity,
+                       new RequestOptions { PartitionKey = new PartitionKey(partitionKey) },
+                       true)).ConfigureAwait(false);
 
                     grainState.ETag = response.Resource.ETag;
-                } else
+                }
+                else
                 {
                     var requestOptions = new RequestOptions
                     {
@@ -227,13 +228,17 @@ namespace Orleans.Persistence.CosmosDB
                         AccessCondition = new AccessCondition { Condition = grainState.ETag, Type = AccessConditionType.IfMatch }
                     };
 
-                    var response = await ExecuteWithRetries(() =>
+                    response = await ExecuteWithRetries(() =>
                         this._dbClient.ReplaceDocumentAsync(
-                            UriFactory.CreateDocumentUri(this._options.DB, this._options.Collection,entity.Id),
+                            UriFactory.CreateDocumentUri(this._options.DB, this._options.Collection, entity.Id),
                             entity, requestOptions)).ConfigureAwait(false);
                     grainState.ETag = response.Resource.ETag;
                 }
 
+            }
+            catch (DocumentClientException dce) when (dce.StatusCode == HttpStatusCode.PreconditionFailed)
+            {
+                throw new CosmosConditionNotSatisfiedException(grainType, grainReference, this._options.Collection, "Unknown", grainState.ETag, dce);
             }
             catch (Exception exc)
             {
@@ -255,10 +260,11 @@ namespace Orleans.Persistence.CosmosDB
             var requestOptions = new RequestOptions
             {
                 PartitionKey = new PartitionKey(partitionKey),
-                AccessCondition = new AccessCondition {  Condition = grainState.ETag, Type = AccessConditionType.IfMatch}
+                AccessCondition = new AccessCondition { Condition = grainState.ETag, Type = AccessConditionType.IfMatch }
             };
 
-            try {
+            try
+            {
                 if (this._options.DeleteStateOnClear)
                 {
                     if (string.IsNullOrWhiteSpace(grainState.ETag))
@@ -284,7 +290,7 @@ namespace Orleans.Persistence.CosmosDB
                         ? this._dbClient.CreateDocumentAsync(
                             UriFactory.CreateDocumentCollectionUri(this._options.DB, this._options.Collection),
                             entity,
-                            new RequestOptions {PartitionKey = new PartitionKey(partitionKey)})
+                            new RequestOptions { PartitionKey = new PartitionKey(partitionKey) })
                         : this._dbClient.ReplaceDocumentAsync(
                             UriFactory.CreateDocumentUri(this._options.DB, this._options.Collection, entity.Id),
                             entity, requestOptions)).ConfigureAwait(false);
@@ -319,15 +325,43 @@ namespace Orleans.Persistence.CosmosDB
 
             try
             {
+                var response = await ExecuteWithRetries(async () =>
+                {
+                    var pk = new PartitionKey(grainType);
+                    var sqlParams = new SqlParameterCollection();
+                    sqlParams.Add(new SqlParameter("@key", key));
+                    var sqlSpec = new SqlQuerySpec($"SELECT * FROM c WHERE c.State.{indexedField} = @key", sqlParams);
+
+                    var query = this._dbClient.CreateDocumentQuery<GrainStateEntity>(
+                        UriFactory.CreateDocumentCollectionUri(this._options.DB, this._options.Collection),
+                        sqlSpec,
+                        new FeedOptions { PartitionKey = pk }
+                    ).AsDocumentQuery();
+
+                    var reminders = new List<GrainStateEntity>();
+
+                    do
+                    {
+                        var queryResponse = await query.ExecuteNextAsync<GrainStateEntity>().ConfigureAwait(false);
+                        if (queryResponse != null && queryResponse.Count > 0)
+                        {
+                            reminders.AddRange(queryResponse.ToArray());
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    } while (query.HasMoreResults);
+
+                    return reminders;
+                }).ConfigureAwait(false);
+
                 var spResponse = await ExecuteWithRetries(() => this._dbClient.ExecuteStoredProcedureAsync<GrainStateEntity[]>(
                         UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, LOOKUP_INDEX_SPROC),
                         new RequestOptions { PartitionKey = new PartitionKey(grainType) },
                         grainType, indexedField, keyString)).ConfigureAwait(false);
 
-                return spResponse.Response == null
-                    ? new List<GrainReference>()
-                    // Note: Utils.FromKeyString is missing from v2.0.3 Orleans, so use this workaround.
-                    : spResponse.Response.Select(entity => this._grainReferenceConverter.GetGrainFromKeyString(GetGrainReferenceString(entity.Id))).ToList();
+                return response.Select(entity => this._grainReferenceConverter.GetGrainFromKeyString(GetGrainReferenceString(entity.Id))).ToList();
             }
             catch (Exception exc)
             {
@@ -341,8 +375,6 @@ namespace Orleans.Persistence.CosmosDB
             this._dbClient.Dispose();
             return Task.CompletedTask;
         }
-
-
         private static async Task<TResult> ExecuteWithRetries<TResult>(Func<Task<TResult>> clientFunc)
         {
             // From:  https://blogs.msdn.microsoft.com/bigdatasupport/2015/09/02/dealing-with-requestratetoolarge-errors-in-azure-documentdb-and-testing-performance/
@@ -466,59 +498,6 @@ namespace Orleans.Persistence.CosmosDB
             catch (DocumentClientException dce) when (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
                 return;
-            }
-        }
-
-        private async Task UpdateStoredProcedures()
-        {
-            var assembly = Assembly.GetExecutingAssembly();
-            foreach (var sproc in this._sprocFiles.Keys)
-            {
-                using (var fileStream = assembly.GetManifestResourceStream($"Orleans.Persistence.CosmosDB.Sprocs.{this._sprocFiles[sproc]}"))
-                using (var reader = new StreamReader(fileStream))
-                {
-                    var content = await reader.ReadToEndAsync();
-                    await UpdateStoredProcedure(sproc, content);
-                }
-            }
-        }
-
-        private async Task UpdateStoredProcedure(string name, string content)
-        {
-            // Partitioned Collections do not support upserts, so check if they exist, and delete/re-insert them if they've changed.
-            var insertStoredProc = false;
-
-            try
-            {
-                var storedProcUri = UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, name);
-                var storedProcResponse = await this._dbClient.ReadStoredProcedureAsync(storedProcUri);
-                var storedProc = storedProcResponse.Resource;
-
-                if (storedProc == null || !Equals(storedProc.Body, content))
-                {
-                    insertStoredProc = true;
-                    await this._dbClient.DeleteStoredProcedureAsync(storedProcUri);
-                }
-            }
-            catch (DocumentClientException dce) when (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
-            {
-                insertStoredProc = true;
-            }
-            catch (Exception exc)
-            {
-                this._logger.LogError(exc, $"Failure Updating Stored Procecure {name}");
-                throw;
-            }
-
-            if (insertStoredProc)
-            {
-                var newStoredProc = new StoredProcedure()
-                {
-                    Id = name,
-                    Body = content
-                };
-
-                await this._dbClient.CreateStoredProcedureAsync(UriFactory.CreateDocumentCollectionUri(this._options.DB, this._options.Collection), newStoredProc);
             }
         }
     }
