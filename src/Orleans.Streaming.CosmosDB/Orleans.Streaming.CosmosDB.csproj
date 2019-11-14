@@ -20,11 +20,10 @@
     <RepositoryType>git</RepositoryType>
     <IncludeSymbols>true</IncludeSymbols>
     <IncludeSource>true</IncludeSource>
-    <VersionPrefix>1.1.0-rc1</VersionPrefix>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Azure.DocumentDB.Core" Version="2.7.0" />
+    <PackageReference Include="Microsoft.Azure.DocumentDB.Core" Version="2.9.0" />
     <PackageReference Include="Microsoft.Orleans.OrleansProviders" Version="3.0.0" />
     <PackageReference Include="System.Threading.Tasks.Extensions" Version="4.5.3" />
     <PackageReference Include="Microsoft.Azure.DocumentDB.ChangeFeedProcessor" Version="2.2.7" />

@@ -26,7 +26,7 @@ namespace Orleans.CosmosDB.Tests
     public abstract class MembershipTableTestsBase : IDisposable //, IClassFixture<ConnectionStringFixture>
     {
         private static readonly string hostName = Dns.GetHostName();
-        private readonly ILogger logger;
+        private readonly ILogger logger = null;
         private readonly IMembershipTable membershipTable;
         private readonly IGatewayListProvider gatewayListProvider;
         protected readonly string clusterId;

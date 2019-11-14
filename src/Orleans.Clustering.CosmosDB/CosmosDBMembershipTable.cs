@@ -55,13 +55,19 @@ namespace Orleans.Clustering.CosmosDB
 
         public async Task InitializeMembershipTable(bool tryInitTableVersion)
         {
-            this._dbClient = new DocumentClient(new Uri(this._options.AccountEndpoint), this._options.AccountKey,
-                    new ConnectionPolicy
-                    {
-                        ConnectionMode = this._options.ConnectionMode,
-                        ConnectionProtocol = this._options.ConnectionProtocol
-                    });
-
+            if (this._options.Client != null)
+            {
+                this._dbClient = this._options.Client;
+            }
+            else
+            {
+                this._dbClient = new DocumentClient(new Uri(this._options.AccountEndpoint), this._options.AccountKey,
+                new ConnectionPolicy
+                {
+                    ConnectionMode = this._options.ConnectionMode,
+                    ConnectionProtocol = this._options.ConnectionProtocol
+                });
+            }
             await this._dbClient.OpenAsync();
 
             if (this._options.CanCreateResources)

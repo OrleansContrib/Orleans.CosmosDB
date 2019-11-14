@@ -14,6 +14,7 @@ using Microsoft.Azure.Documents.Client;
 using Microsoft.Azure.Documents.Linq;
 using Microsoft.Azure.Documents;
 using static Orleans.CosmosDB.Tests.IndexTests;
+using System.Net.Http;
 
 namespace Orleans.CosmosDB.Tests
 {
@@ -33,14 +34,19 @@ namespace Orleans.CosmosDB.Tests
             {
                 OrleansFixture.GetAccountInfo(out this.AccountEndpoint, out this.AccountKey);
 
+                var httpHandler = new HttpClientHandler()
+                {
+                    ServerCertificateCustomValidationCallback = (req, cert, chain, errors) => true
+                };
+
+                var dbClient = new DocumentClient(new Uri(this.AccountEndpoint), this.AccountKey, httpHandler, new ConnectionPolicy { ConnectionMode = ConnectionMode.Gateway, ConnectionProtocol = Protocol.Https });
+
+
                 return builder
                     .AddCosmosDBGrainStorage(OrleansFixture.TEST_STORAGE, opt =>
                     {
-                        opt.AccountEndpoint = this.AccountEndpoint;
-                        opt.AccountKey = this.AccountKey;
-                        opt.ConnectionMode = ConnectionMode.Gateway;
+                        opt.Client = dbClient;
                         opt.DropDatabaseOnInit = true;
-                        opt.AutoUpdateStoredProcedures = true;
                         opt.CanCreateResources = true;
                         opt.DB = StorageDbName;
                         opt.StateFieldsToIndex.Add("NftIndexedInt");
@@ -111,7 +117,8 @@ namespace Orleans.CosmosDB.Tests
             {
                 var grains = await storage.LookupAsync(grainTypeName(), "NftIndexedInt", nftValue(i));
                 Assert.Equal(max / mod, grains.Count);
-                foreach (var grain in grains.Select(g => castToClientSpace(g))) {
+                foreach (var grain in grains.Select(g => castToClientSpace(g)))
+                {
                     Assert.Equal(i, await grain.GetNftIndexedIntAsync());
                     Assert.True(parseIntValue(await grain.GetFtIndexedStringAsync()) % mod == i);
                     Assert.True(parseIntValue(await grain.GetNonIndexedStringAsync()) % mod == i);
