@@ -11,11 +11,10 @@ using Xunit;
 using static Orleans.CosmosDB.Tests.PersistenceTests;
 
 // For Index coverage CreateDocumentQuery
-using Microsoft.Azure.Documents.Client;
-using Microsoft.Azure.Documents.Linq;
-using Microsoft.Azure.Documents;
 using Orleans.Persistence.CosmosDB.Options;
 using System.Net.Http;
+using Microsoft.Azure.Cosmos;
+using Orleans.Persistence.CosmosDB.Models;
 
 namespace Orleans.CosmosDB.Tests
 {
@@ -49,8 +48,11 @@ namespace Orleans.CosmosDB.Tests
                     ServerCertificateCustomValidationCallback = (req, cert, chain, errors) => true
                 };
 
-                var dbClient = new DocumentClient(new Uri(this.AccountEndpoint), this.AccountKey, httpHandler, new ConnectionPolicy { ConnectionMode = ConnectionMode.Gateway, ConnectionProtocol = Protocol.Https });
-
+                var dbClient = new CosmosClient(
+                    this.AccountEndpoint,
+                    this.AccountKey,
+                    new CosmosClientOptions { ConnectionMode = ConnectionMode.Gateway }
+                );
                 return builder
                     .AddCosmosDBGrainStorage<PrimaryKeyPartitionKeyProvider>(OrleansFixture.TEST_STORAGE, opt =>
                     {
@@ -99,17 +101,19 @@ namespace Orleans.CosmosDB.Tests
             await grain.Deactivate();
 
             var storage = this._fixture.Host.Services.GetServiceByName<IGrainStorage>(OrleansFixture.TEST_STORAGE) as CosmosDBGrainStorage;
-            IDocumentQuery<dynamic> query = storage._dbClient.CreateDocumentQuery(
-                UriFactory.CreateDocumentCollectionUri(StorageDbName, CosmosDBStorageOptions.ORLEANS_STORAGE_COLLECTION),
+            var container = storage._container;
+
+            var query = container.GetItemQueryIterator<dynamic>(
                 $"SELECT * FROM c WHERE c.PartitionKey = \"" + guid.ToString() + "\"",
-                new FeedOptions
+                requestOptions: new QueryRequestOptions
                 {
-                    PopulateQueryMetrics = true,
                     MaxItemCount = -1,
-                    MaxDegreeOfParallelism = -1,
+                    MaxConcurrency = -1,
                     PartitionKey = new PartitionKey(guid.ToString())
-                }).AsDocumentQuery();
-            FeedResponse<dynamic> result = await query.ExecuteNextAsync();
+                }
+            );
+
+            FeedResponse<dynamic> result = await query.ReadNextAsync();
             Assert.Equal(1, result.Count);
 
             var grain2 = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
@@ -150,20 +154,22 @@ namespace Orleans.CosmosDB.Tests
 
             //change etag
             var storage = this._fixture.Host.Services.GetServiceByName<IGrainStorage>(OrleansFixture.TEST_STORAGE) as CosmosDBGrainStorage;
-            IDocumentQuery<dynamic> query = storage._dbClient.CreateDocumentQuery(
-               UriFactory.CreateDocumentCollectionUri(StorageDbName, CosmosDBStorageOptions.ORLEANS_STORAGE_COLLECTION),
-               $"SELECT * FROM c WHERE c.PartitionKey = \"" + guid.ToString() + "\"",
-               new FeedOptions
-               {
-                   PopulateQueryMetrics = true,
-                   MaxItemCount = -1,
-                   MaxDegreeOfParallelism = -1,
-                   PartitionKey = new PartitionKey(guid.ToString())
-               }).AsDocumentQuery();
-            FeedResponse<dynamic> result = await query.ExecuteNextAsync();
-            Document doc = result.Single();
-            doc.SetPropertyValue("forceUpdate", "test");
-            var response = await storage._dbClient.ReplaceDocumentAsync(doc, new RequestOptions { PartitionKey = new PartitionKey(guid.ToString()) });
+            var container = storage._container;
+
+            var query = container.GetItemQueryIterator<GrainStateEntity>(
+                $"SELECT * FROM c WHERE c.PartitionKey = \"" + guid.ToString() + "\"",
+                requestOptions: new QueryRequestOptions
+                {
+                    MaxItemCount = -1,
+                    MaxConcurrency = -1,
+                    PartitionKey = new PartitionKey(guid.ToString())
+                }
+            );
+
+            FeedResponse<GrainStateEntity> result = await query.ReadNextAsync();
+            GrainStateEntity doc = result.Single();
+            doc.State = "test";
+            var response = await container.ReplaceItemAsync(doc, doc.Id,  new PartitionKey(guid.ToString()));
 
             await Assert.ThrowsAsync<CosmosConditionNotSatisfiedException>(() => grain.Write("Second test"));
         }

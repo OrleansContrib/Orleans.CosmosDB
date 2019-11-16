@@ -1,5 +1,4 @@
-using Microsoft.Azure.Documents;
-using Microsoft.Azure.Documents.Client;
+using Microsoft.Azure.Cosmos;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Orleans.Runtime;
@@ -12,9 +11,8 @@ namespace Orleans.Persistence.CosmosDB
         private const string ORLEANS_DB = "Orleans";
         internal const string ORLEANS_STORAGE_COLLECTION = "OrleansStorage";
         private const int ORLEANS_STORAGE_COLLECTION_THROUGHPUT = 400;
-        private const int ORLEANS_DATABASE_THROUGHPUT = 0;
 
-        public DocumentClient Client { get; set; }
+        public CosmosClient Client { get; set; }
 
         [Redact]
         public string AccountKey { get; set; }
@@ -35,9 +33,6 @@ namespace Orleans.Persistence.CosmosDB
 
         [JsonConverter(typeof(StringEnumConverter))]
         public ConnectionMode ConnectionMode { get; set; } = ConnectionMode.Direct;
-
-        [JsonConverter(typeof(StringEnumConverter))]
-        public Protocol ConnectionProtocol { get; set; } = Protocol.Tcp;
 
         public JsonSerializerSettings JsonSerializerSettings { get; set; }
 

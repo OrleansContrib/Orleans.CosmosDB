@@ -1,5 +1,4 @@
-using Microsoft.Azure.Documents;
-using Microsoft.Azure.Documents.Client;
+using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orleans.Clustering.CosmosDB.Models;
@@ -7,33 +6,26 @@ using Orleans.Configuration;
 using Orleans.Runtime;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Net;
-using System.Reflection;
 using System.Threading.Tasks;
 
 namespace Orleans.Clustering.CosmosDB
 {
     internal class CosmosDBMembershipTable : IMembershipTable
     {
-        private const string DELETE_ALL_SPROC = "DeleteAllEntries";
-        private const string GET_ALIVE_GATEWAYS_SPROC = "GetAliveGateways";
-        private const string INSERT_SILO_SPROC = "InsertSiloEntity";
-        private const string READ_ALL_SPROC = "ReadAll";
-        private const string READ_SILO_SPROC = "ReadSiloEntity";
-        private const string UPDATE_I_AM_ALIVE_SPROC = "UpdateIAmAlive";
-        private const string UPDATE_SILO_SPROC = "UpdateSiloEntity";
+        private const string READ_ALL_QUERY = "SELECT * FROM c";
+        private const string READ_ENTRY_QUERY = "SELECT * FROM c WHERE c.id = @siloId OR c.id = 'ClusterVersion'";
         private const string CLUSTER_VERSION_ID = "ClusterVersion";
         private const string PARTITION_KEY = "/ClusterId";
 
-        private readonly Dictionary<string, string> _sprocFiles;
         private readonly ILoggerFactory _loggerFactory;
         private readonly ILogger _logger;
         private readonly CosmosDBClusteringOptions _options;
         private readonly ClusterOptions _clusterOptions;
 
-        private DocumentClient _dbClient;
+        private CosmosClient _cosmos;
+        private Container _container;
 
         public CosmosDBMembershipTable(ILoggerFactory loggerFactory, IOptions<ClusterOptions> clusterOptions, IOptions<CosmosDBClusteringOptions> clusteringOptions)
         {
@@ -41,74 +33,62 @@ namespace Orleans.Clustering.CosmosDB
             this._loggerFactory = loggerFactory;
             this._logger = loggerFactory?.CreateLogger<CosmosDBMembershipTable>();
             this._options = clusteringOptions.Value;
-            this._sprocFiles = new Dictionary<string, string>
-            {
-                { DELETE_ALL_SPROC, $"{DELETE_ALL_SPROC}.js" },
-                { GET_ALIVE_GATEWAYS_SPROC, $"{GET_ALIVE_GATEWAYS_SPROC}.js" },
-                { INSERT_SILO_SPROC, $"{INSERT_SILO_SPROC}.js" },
-                { READ_ALL_SPROC, $"{READ_ALL_SPROC}.js" },
-                { READ_SILO_SPROC, $"{READ_SILO_SPROC}.js" },
-                { UPDATE_I_AM_ALIVE_SPROC, $"{UPDATE_I_AM_ALIVE_SPROC}.js" },
-                { UPDATE_SILO_SPROC, $"{UPDATE_SILO_SPROC}.js" },
-            };
         }
 
         public async Task InitializeMembershipTable(bool tryInitTableVersion)
         {
             if (this._options.Client != null)
             {
-                this._dbClient = this._options.Client;
+                this._cosmos = this._options.Client;
             }
             else
             {
-                this._dbClient = new DocumentClient(new Uri(this._options.AccountEndpoint), this._options.AccountKey,
-                new ConnectionPolicy
-                {
-                    ConnectionMode = this._options.ConnectionMode,
-                    ConnectionProtocol = this._options.ConnectionProtocol
-                });
+                this._cosmos = new CosmosClient(this._options.AccountEndpoint, this._options.AccountKey,
+                    new CosmosClientOptions
+                    {
+                        ConnectionMode = this._options.ConnectionMode
+                    }
+                );
             }
-            await this._dbClient.OpenAsync();
+            this._container = this._cosmos.GetDatabase(this._options.DB).GetContainer(this._options.Collection);
 
             if (this._options.CanCreateResources)
             {
                 if (this._options.DropDatabaseOnInit)
                 {
-                    await TryDeleteDatabase();
+                    await this.TryDeleteDatabase();
                 }
 
-                await TryCreateCosmosDBResources();
-
-                if (this._options.AutoUpdateStoredProcedures)
-                {
-                    await UpdateStoredProcedures();
-                }
+                await this.TryCreateCosmosDBResources();
             }
 
-            var versionEntity = (await this._dbClient.Query<ClusterVersionEntity>(
-                this._options.DB, this._options.Collection, t =>
-                    t.ClusterId == this._clusterOptions.ClusterId &&
-                    t.EntityType == nameof(ClusterVersionEntity))).SingleOrDefault();
+            ClusterVersionEntity versionEntity = null;
 
-            if (versionEntity == null)
+            try
             {
-                versionEntity = new ClusterVersionEntity
+                versionEntity = (await this._container.ReadItemAsync<ClusterVersionEntity>(
+                    CLUSTER_VERSION_ID,
+                    new PartitionKey(this._clusterOptions.ClusterId))).Resource;
+            }
+            catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.NotFound)
+            {
+                if (versionEntity == null)
                 {
-                    ClusterId = this._clusterOptions.ClusterId,
-                    ClusterVersion = 0,
-                    Id = CLUSTER_VERSION_ID
-                };
-
-                var response = await this._dbClient.CreateDocumentAsync(
-                    UriFactory.CreateDocumentCollectionUri(this._options.DB, this._options.Collection),
-                    versionEntity,
-                    new RequestOptions
+                    versionEntity = new ClusterVersionEntity
                     {
-                        PartitionKey = new PartitionKey(versionEntity.ClusterId)
-                    });
+                        ClusterId = this._clusterOptions.ClusterId,
+                        ClusterVersion = 0,
+                        Id = CLUSTER_VERSION_ID
+                    };
 
-                if (response.StatusCode == HttpStatusCode.Created)
-                    this._logger?.Info("Created new Cluster Version entity.");
+                    var response = await this._container.CreateItemAsync(
+                        versionEntity,
+                        new PartitionKey(versionEntity.ClusterId)
+                    );
+
+                    if (response.StatusCode == HttpStatusCode.Created)
+                        this._logger?.Info("Created new Cluster Version entity.");
+                }
             }
         }
 
@@ -116,10 +96,10 @@ namespace Orleans.Clustering.CosmosDB
         {
             try
             {
-                ReadResponse spResponse = await ReadRecords();
+                (ClusterVersionEntity Version, List<SiloEntity> Silos) response = await this.ReadRecords(this._clusterOptions.ClusterId);
 
-                ClusterVersionEntity versionEntity = spResponse.ClusterVersion;
-                List<SiloEntity> entryEntities = spResponse.Silos;
+                ClusterVersionEntity versionEntity = response.Version;
+                List<SiloEntity> entryEntities = response.Silos;
 
                 TableVersion version = null;
                 if (versionEntity != null)
@@ -156,12 +136,20 @@ namespace Orleans.Clustering.CosmosDB
             }
         }
 
-        public Task DeleteMembershipTableEntries(string clusterId)
+        public async Task DeleteMembershipTableEntries(string clusterId)
         {
-            return this._dbClient.ExecuteStoredProcedureAsync<int>(
-                UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, DELETE_ALL_SPROC),
-                        new RequestOptions { PartitionKey = new PartitionKey(clusterId) },
-                        clusterId);
+            var all = await this.ReadRecords(clusterId);
+
+            var batch = this._container.CreateTransactionalBatch(new PartitionKey(clusterId));
+
+            foreach (var silo in all.Silos)
+            {
+                batch = batch.DeleteItem(silo.Id);
+            }
+
+            batch = batch.DeleteItem(all.Version.Id);
+
+            await batch.ExecuteAsync();
         }
 
         public async Task<bool> InsertRow(MembershipEntry entry, TableVersion tableVersion)
@@ -169,16 +157,15 @@ namespace Orleans.Clustering.CosmosDB
             try
             {
                 var siloEntity = ConvertToEntity(entry, this._clusterOptions.ClusterId);
-                var versionEntity = BuildVersionEntity(tableVersion);
+                var versionEntity = this.BuildVersionEntity(tableVersion);
 
-                var spResponse = await this._dbClient.ExecuteStoredProcedureAsync<bool>(
-                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, INSERT_SILO_SPROC),
-                        new RequestOptions { PartitionKey = new PartitionKey(this._clusterOptions.ClusterId) },
-                        siloEntity, versionEntity);
+                var response = await this._container.CreateTransactionalBatch(new PartitionKey(this._clusterOptions.ClusterId))
+                    .ReplaceItem(versionEntity.Id, versionEntity, new TransactionalBatchItemRequestOptions { IfMatchEtag = tableVersion.VersionEtag })
+                    .CreateItem(siloEntity).ExecuteAsync();
 
-                return spResponse.Response;
+                return response.IsSuccessStatusCode;
             }
-            catch (DocumentClientException exc)
+            catch (CosmosException exc)
             {
                 if (exc.StatusCode == HttpStatusCode.PreconditionFailed) return false;
                 throw;
@@ -191,18 +178,24 @@ namespace Orleans.Clustering.CosmosDB
 
             try
             {
-                var spResponse = await this._dbClient.ExecuteStoredProcedureAsync<ReadResponse>(
-                    UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, READ_SILO_SPROC),
-                    new RequestOptions { PartitionKey = new PartitionKey(this._clusterOptions.ClusterId) },
-                    this._clusterOptions.ClusterId, id);
+                var query = this._container
+                    .GetItemQueryIterator<dynamic>(
+                        new QueryDefinition(READ_ENTRY_QUERY).WithParameter("@siloId", id),
+                        requestOptions: new QueryRequestOptions
+                        {
+                            PartitionKey = new PartitionKey(this._clusterOptions.ClusterId)
+                        }
+                    );
 
-                ClusterVersionEntity versionEntity = spResponse.Response.ClusterVersion;
-                List<SiloEntity> entryEntities = spResponse.Response.Silos;
+                var docs = await query.ReadNextAsync();
+                var versionDoc = docs.Where(i => i.EntityType == nameof(ClusterVersionEntity)).SingleOrDefault();
+                ClusterVersionEntity clusterVersionEntity = versionDoc != null ? ClusterVersionEntity.FromDocument(versionDoc) : default;
+                var siloEntities = docs.Where(i => i.EntityType == nameof(SiloEntity)).Select<dynamic, SiloEntity>(d => SiloEntity.FromDocument(d));
 
                 TableVersion version = null;
-                if (versionEntity != null)
+                if (clusterVersionEntity != null)
                 {
-                    version = new TableVersion(versionEntity.ClusterVersion, versionEntity.ETag);
+                    version = new TableVersion(clusterVersionEntity.ClusterVersion, clusterVersionEntity.ETag);
                 }
                 else
                 {
@@ -210,7 +203,7 @@ namespace Orleans.Clustering.CosmosDB
                 }
 
                 var memEntries = new List<Tuple<MembershipEntry, string>>();
-                foreach (var entity in entryEntities)
+                foreach (var entity in siloEntities)
                 {
                     try
                     {
@@ -235,23 +228,11 @@ namespace Orleans.Clustering.CosmosDB
 
         }
 
-        public async Task UpdateIAmAlive(MembershipEntry entry)
+        public Task UpdateIAmAlive(MembershipEntry entry)
         {
-            try
-            {
-                var siloEntity = ConvertToEntity(entry, this._clusterOptions.ClusterId);
+            var siloEntity = ConvertToEntity(entry, this._clusterOptions.ClusterId);
 
-                var spResponse = await this._dbClient.ExecuteStoredProcedureAsync<bool>(
-                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, UPDATE_I_AM_ALIVE_SPROC),
-                        new RequestOptions { PartitionKey = new PartitionKey(this._clusterOptions.ClusterId) },
-                        siloEntity.Id, siloEntity.IAmAliveTime);
-
-                if (!spResponse.Response) throw new InvalidOperationException("Unable to update IAmAlive");
-            }
-            catch (DocumentClientException)
-            {
-                throw;
-            }
+            return this._container.ReplaceItemAsync(siloEntity, siloEntity.Id, new PartitionKey(this._clusterOptions.ClusterId));
         }
 
         public async Task<bool> UpdateRow(MembershipEntry entry, string etag, TableVersion tableVersion)
@@ -261,16 +242,15 @@ namespace Orleans.Clustering.CosmosDB
                 var siloEntity = ConvertToEntity(entry, this._clusterOptions.ClusterId);
                 siloEntity.ETag = etag;
 
-                var versionEntity = BuildVersionEntity(tableVersion);
+                var versionEntity = this.BuildVersionEntity(tableVersion);
 
-                var spResponse = await this._dbClient.ExecuteStoredProcedureAsync<bool>(
-                        UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, UPDATE_SILO_SPROC),
-                        new RequestOptions { PartitionKey = new PartitionKey(this._clusterOptions.ClusterId) },
-                        siloEntity, versionEntity);
+                var response = await this._container.CreateTransactionalBatch(new PartitionKey(this._clusterOptions.ClusterId))
+                    .ReplaceItem(versionEntity.Id, versionEntity, new TransactionalBatchItemRequestOptions { IfMatchEtag = tableVersion.VersionEtag })
+                    .ReplaceItem(siloEntity.Id, siloEntity, new TransactionalBatchItemRequestOptions { IfMatchEtag = siloEntity.ETag }).ExecuteAsync();
 
-                return spResponse.Response;
+                return response.IsSuccessStatusCode;
             }
-            catch (DocumentClientException exc)
+            catch (CosmosException exc)
             {
                 if (exc.StatusCode == HttpStatusCode.PreconditionFailed) return false;
                 throw;
@@ -367,11 +347,9 @@ namespace Orleans.Clustering.CosmosDB
         {
             try
             {
-                var dbUri = UriFactory.CreateDatabaseUri(this._options.DB);
-                await this._dbClient.ReadDatabaseAsync(dbUri);
-                await this._dbClient.DeleteDatabaseAsync(dbUri);
+                await this._cosmos.GetDatabase(this._options.DB).DeleteAsync();
             }
-            catch (DocumentClientException dce) when (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
+            catch (CosmosException dce) when (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
                 return;
             }
@@ -379,106 +357,45 @@ namespace Orleans.Clustering.CosmosDB
 
         private async Task TryCreateCosmosDBResources()
         {
-            await this._dbClient.CreateDatabaseIfNotExistsAsync(new Database { Id = this._options.DB });
+            var dbResponse = (await this._cosmos.CreateDatabaseIfNotExistsAsync(this._options.DB)).Database;
 
-            var clusterCollection = new DocumentCollection
-            {
-                Id = this._options.Collection
-            };
-            clusterCollection.PartitionKey.Paths.Add(PARTITION_KEY);
+            var containerProperties = new ContainerProperties(this._options.Collection, PARTITION_KEY);
+            containerProperties.IndexingPolicy.IndexingMode = IndexingMode.Consistent;
+            containerProperties.IndexingPolicy.IncludedPaths.Add(new IncludedPath { Path = "/*" });
+            containerProperties.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/Address/*" });
+            containerProperties.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/Port/*" });
+            containerProperties.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/Generation/*" });
+            containerProperties.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/Hostname/*" });
+            containerProperties.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/SiloName/*" });
+            containerProperties.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/\"SuspectingSilos\"/*" });
+            containerProperties.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/\"SuspectingTimes\"/*" });
+            containerProperties.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/StartTime/*" });
+            containerProperties.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/IAmAliveTime/*" });
+            //var consistency = this._options.GetConsistencyLevel();
+            //if (consistency.HasValue)
+            //{
+            //    containerProperties.IndexingPolicy.IndexingMode = consistency.Value;
+            //}
+            containerProperties.IndexingPolicy.IndexingMode = IndexingMode.Consistent;
 
-            clusterCollection.IndexingPolicy.IndexingMode = IndexingMode.Consistent;
-            clusterCollection.IndexingPolicy.IncludedPaths.Add(new IncludedPath { Path = "/*" });
-            clusterCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/Address/*" });
-            clusterCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/Port/*" });
-            clusterCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/Generation/*" });
-            clusterCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/Hostname/*" });
-            clusterCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/SiloName/*" });
-            clusterCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/\"SuspectingSilos\"/*" });
-            clusterCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/\"SuspectingTimes\"/*" });
-            clusterCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/StartTime/*" });
-            clusterCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/IAmAliveTime/*" });
-
-            await this._dbClient.CreateDocumentCollectionIfNotExistsAsync(
-                UriFactory.CreateDatabaseUri(this._options.DB),
-                clusterCollection,
-                new RequestOptions
-                {
-                    PartitionKey = new PartitionKey(PARTITION_KEY),
-                    ConsistencyLevel = this._options.GetConsistencyLevel(),
-                    OfferThroughput = this._options.CollectionThroughput
-                });
-        }
-
-        private async Task UpdateStoredProcedures()
-        {
-            var assembly = Assembly.GetExecutingAssembly();
-            foreach (var sproc in this._sprocFiles.Keys)
-            {
-                using (var fileStream = assembly.GetManifestResourceStream($"Orleans.Clustering.CosmosDB.Sprocs.{this._sprocFiles[sproc]}"))
-                using (var reader = new StreamReader(fileStream))
-                {
-                    var content = await reader.ReadToEndAsync();
-                    await UpdateStoredProcedure(sproc, content);
-                }
-            }
-        }
-
-        private async Task UpdateStoredProcedure(string name, string content)
-        {
-            // Partitioned Collections do not support upserts, so check if they exist, and delete/re-insert them if they've changed.
-            var insertStoredProc = false;
-
-            try
-            {
-                var storedProcUri = UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, name);
-                var storedProcResponse = await this._dbClient.ReadStoredProcedureAsync(storedProcUri);
-                var storedProc = storedProcResponse.Resource;
-
-                if (storedProc == null || !Equals(storedProc.Body, content))
-                {
-                    insertStoredProc = true;
-                    await this._dbClient.DeleteStoredProcedureAsync(storedProcUri);
-                }
-            }
-            catch (DocumentClientException dce) when (dce.StatusCode == HttpStatusCode.NotFound)
-            {
-                insertStoredProc = true;
-            }
-            catch (Exception exc)
-            {
-                this._logger.LogError(exc, $"Failure Updating Stored Procecure {name}");
-                throw;
-            }
-
-            if (insertStoredProc)
-            {
-                var newStoredProc = new StoredProcedure()
-                {
-                    Id = name,
-                    Body = content
-                };
-
-                await this._dbClient.CreateStoredProcedureAsync(UriFactory.CreateDocumentCollectionUri(this._options.DB, this._options.Collection), newStoredProc);
-            }
+            await dbResponse.CreateContainerIfNotExistsAsync(
+                containerProperties, this._options.CollectionThroughput);
         }
 
         public async Task CleanupDefunctSiloEntries(DateTimeOffset beforeDate)
         {
-            var allSilos = (await this.ReadRecords()).Silos;
+            var allSilos = (await this.ReadRecords(this._clusterOptions.ClusterId)).Silos;
             if (allSilos.Count == 0) return;
 
             var toDelete = allSilos.Where(s => s.Status == SiloStatus.Dead && s.IAmAliveTime < beforeDate);
             var tasks = new List<Task>();
+            var pk = new PartitionKey(this._clusterOptions.ClusterId);
             foreach (var deadSilo in toDelete)
             {
                 tasks.Add(
-                    this._dbClient.DeleteDocumentAsync(
-                        UriFactory.CreateDocumentUri(
-                            this._options.DB,
-                            this._options.Collection,
-                            deadSilo.Id
-                        )
+                    this._container.DeleteItemAsync<SiloEntity>(
+                        deadSilo.Id,
+                        pk
                     )
                 );
             }
@@ -486,12 +403,32 @@ namespace Orleans.Clustering.CosmosDB
             await Task.WhenAll(tasks);
         }
 
-        private async Task<ReadResponse> ReadRecords()
+        private async Task<(ClusterVersionEntity Version, List<SiloEntity> Silos)> ReadRecords(string clusterId)
         {
-            return (await this._dbClient.ExecuteStoredProcedureAsync<ReadResponse>(
-                UriFactory.CreateStoredProcedureUri(this._options.DB, this._options.Collection, READ_ALL_SPROC),
-                new RequestOptions { PartitionKey = new PartitionKey(this._clusterOptions.ClusterId) },
-                this._clusterOptions.ClusterId)).Response;
+            var query = this._container
+                .GetItemQueryIterator<dynamic>(
+                    READ_ALL_QUERY,
+                    requestOptions: new QueryRequestOptions
+                    {
+                        PartitionKey = new PartitionKey(clusterId)
+                    }
+                );
+
+            var silos = new List<SiloEntity>();
+            ClusterVersionEntity clusterVersion = null;
+            do
+            {
+                var items = await query.ReadNextAsync();
+                var version = items.Where(i => i.EntityType == nameof(ClusterVersionEntity)).SingleOrDefault();
+                if (version != null)
+                {
+                    clusterVersion = ClusterVersionEntity.FromDocument(version);
+                }
+
+                silos.AddRange(items.Where(i => i.EntityType == nameof(SiloEntity)).Select(d => (SiloEntity)SiloEntity.FromDocument(d)));
+            } while (query.HasMoreResults);
+
+            return (clusterVersion, silos);
         }
     }
 }

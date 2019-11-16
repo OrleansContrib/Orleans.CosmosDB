@@ -1,10 +1,12 @@
-using Microsoft.Azure.Documents.Client;
+using Microsoft.Azure.Cosmos;
+using Microsoft.Azure.Cosmos.Fluent;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orleans.Clustering.CosmosDB;
 using Orleans.Configuration;
 using Orleans.Messaging;
 using System;
+using System.Collections.ObjectModel;
 using System.Net.Http;
 using System.Threading.Tasks;
 using Xunit;
@@ -36,14 +38,17 @@ namespace Orleans.CosmosDB.Tests
                 ServerCertificateCustomValidationCallback = (req, cert, chain, errors) => true
             };
 
-            var dbClient = new DocumentClient(new Uri(accountEndpoint), accountKey, httpHandler, new ConnectionPolicy { ConnectionMode = ConnectionMode.Gateway, ConnectionProtocol = Protocol.Https });
+            var dbClient = new CosmosClient(
+                accountEndpoint,
+                accountKey,
+                new CosmosClientOptions { ConnectionMode = ConnectionMode.Gateway }
+            );
 
             //TestUtils.CheckForAzureStorage();
             var options = new CosmosDBClusteringOptions()
             {
                 Client = dbClient,
                 CanCreateResources = true,
-                AutoUpdateStoredProcedures = true,
                 DropDatabaseOnInit = true,
                 DB = "OrleansMBRTest"
             };
@@ -57,13 +62,18 @@ namespace Orleans.CosmosDB.Tests
                 ServerCertificateCustomValidationCallback = (req, cert, chain, errors) => true
             };
 
-            var dbClient = new DocumentClient(new Uri(accountEndpoint), accountKey, httpHandler, new ConnectionPolicy { ConnectionMode = ConnectionMode.Gateway, ConnectionProtocol = Protocol.Https });
+            var dbClient = new CosmosClient(
+                accountEndpoint,
+                accountKey,
+                new CosmosClientOptions { ConnectionMode = ConnectionMode.Gateway }
+            );
 
             var options = new CosmosDBGatewayOptions()
             {
                 Client = dbClient,
                 DB = "OrleansMBRTest"
             };
+
             return new CosmosDBGatewayListProvider(this.loggerFactory,
                 Options.Create(options),
                 Options.Create(new ClusterOptions { ClusterId = this.clusterId }),

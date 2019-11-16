@@ -1,4 +1,4 @@
-using Microsoft.Azure.Documents.Client;
+using Microsoft.Azure.Cosmos;
 using Orleans.CosmosDB.Tests.Grains;
 using Orleans.Hosting;
 using System;
@@ -24,7 +24,11 @@ namespace Orleans.CosmosDB.Tests
                     ServerCertificateCustomValidationCallback = (req, cert, chain, errors) => true
                 };
 
-                var dbClient = new DocumentClient(new Uri(accountEndpoint), accountKey, httpHandler, new ConnectionPolicy { ConnectionMode = ConnectionMode.Gateway, ConnectionProtocol = Protocol.Https });
+                var dbClient = new CosmosClient(
+                    accountEndpoint,
+                    accountKey,
+                    new CosmosClientOptions { ConnectionMode = ConnectionMode.Gateway }
+                );
 
                 return builder
                     .AddMemoryGrainStorage(OrleansFixture.TEST_STORAGE)

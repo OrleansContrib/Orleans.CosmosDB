@@ -1,6 +1,4 @@
-using Microsoft.Azure.Documents;
-using Microsoft.Azure.Documents.Client;
-using Microsoft.Azure.Documents.Linq;
+using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -42,7 +40,8 @@ namespace Orleans.Persistence.CosmosDB
         private readonly ITypeResolver _typeResolver;
         private readonly CosmosDBStorageOptions _options;
         private readonly IPartitionKeyProvider _partitionKeyProvider;
-        internal DocumentClient _dbClient;  // internal for test
+        internal CosmosClient _cosmos;  // internal for test
+        internal Container _container;
 
 
         private string _partitionKeyPath = DEFAULT_PARTITION_KEY_PATH; //overwritten with old value for existing collections
@@ -101,28 +100,26 @@ namespace Orleans.Persistence.CosmosDB
 
                 if (this._options.Client != null)
                 {
-                    this._dbClient = this._options.Client;
+                    this._cosmos = this._options.Client;
                 }
                 else
                 {
-                    this._dbClient = new DocumentClient(new Uri(this._options.AccountEndpoint), this._options.AccountKey,
-                            new ConnectionPolicy
-                            {
-                                ConnectionMode = this._options.ConnectionMode,
-                                ConnectionProtocol = this._options.ConnectionProtocol
-                            });
+                    this._cosmos = new CosmosClient(
+                        this._options.AccountEndpoint,
+                        this._options.AccountKey,
+                        new CosmosClientOptions { ConnectionMode = this._options.ConnectionMode }
+                    );
                 }
-
-                await this._dbClient.OpenAsync();
+                this._container = this._cosmos.GetDatabase(this._options.DB).GetContainer(this._options.Collection);
 
                 if (this._options.CanCreateResources)
                 {
                     if (this._options.DropDatabaseOnInit)
                     {
-                        await TryDeleteDatabase();
+                        await this.TryDeleteDatabase();
                     }
 
-                    await TryCreateCosmosDBResources();
+                    await this.TryCreateCosmosDBResources();
                 }
 
                 stopWatch.Stop();
@@ -139,10 +136,10 @@ namespace Orleans.Persistence.CosmosDB
 
         public async Task ReadStateAsync(string grainType, GrainReference grainReference, IGrainState grainState)
         {
-            if (this._dbClient == null) throw new ArgumentException("GrainState collection not initialized.");
+            if (this._cosmos == null) throw new ArgumentException("GrainState collection not initialized.");
 
-            string id = GetKeyString(grainReference);
-            string partitionKey = await BuildPartitionKey(grainType, grainReference);
+            string id = this.GetKeyString(grainReference);
+            string partitionKey = await this.BuildPartitionKey(grainType, grainReference);
 
             if (this._logger.IsEnabled(LogLevel.Trace)) this._logger.Trace(
                 "Reading: GrainType={0} Key={1} Grainid={2} from Collection={3} with PartitionKey={4}",
@@ -150,23 +147,21 @@ namespace Orleans.Persistence.CosmosDB
 
             try
             {
-                var doc = await ExecuteWithRetries(async () => await this._dbClient.ReadDocumentAsync<GrainStateEntity>(
-                    UriFactory.CreateDocumentUri(this._options.DB, this._options.Collection, id),
-                    new RequestOptions { PartitionKey = new PartitionKey(partitionKey) })).ConfigureAwait(false);
+                var doc = await ExecuteWithRetries(async () => await this._container.ReadItemAsync<GrainStateEntity>(
+                    id, new PartitionKey(partitionKey))).ConfigureAwait(false);
 
-                if (doc.Document?.State != null)
+                if (doc.Resource.State != null)
                 {
-                    grainState.State = JsonConvert.DeserializeObject(doc.Document.State.ToString(), grainState.State.GetType(), this._options.JsonSerializerSettings);
-                    grainState.ETag = doc.Document.ETag;
+                    grainState.State = JsonConvert.DeserializeObject(doc.Resource.State.ToString(), grainState.State.GetType(), this._options.JsonSerializerSettings);
                 }
                 else
                 {
-                    // Default state, to prevent null reference exceptions when the grain is first activated
                     grainState.State = Activator.CreateInstance(grainState.State.GetType());
-                    grainState.ETag = doc.Document?.ETag;
                 }
+                
+                grainState.ETag = doc.Resource.ETag;
             }
-            catch (DocumentClientException dce)
+            catch (CosmosException dce)
             {
                 if (dce.StatusCode == HttpStatusCode.NotFound)
                 {
@@ -187,17 +182,17 @@ namespace Orleans.Persistence.CosmosDB
 
         public async Task WriteStateAsync(string grainType, GrainReference grainReference, IGrainState grainState)
         {
-            if (this._dbClient == null) throw new ArgumentException("GrainState collection not initialized.");
+            if (this._cosmos == null) throw new ArgumentException("GrainState collection not initialized.");
 
-            string id = GetKeyString(grainReference);
+            string id = this.GetKeyString(grainReference);
 
-            string partitionKey = await BuildPartitionKey(grainType, grainReference);
+            string partitionKey = await this.BuildPartitionKey(grainType, grainReference);
 
             if (this._logger.IsEnabled(LogLevel.Trace)) this._logger.Trace(
                 "Writing: GrainType={0} Key={1} Grainid={2} ETag={3} from Collection={4} with PartitionKey={5}",
                 grainType, id, grainReference, grainState.ETag, this._options.Collection, partitionKey);
 
-            ResourceResponse<Document> response = null;
+            ItemResponse<GrainStateEntity> response = null;
 
             try
             {
@@ -212,31 +207,25 @@ namespace Orleans.Persistence.CosmosDB
 
                 if (string.IsNullOrWhiteSpace(grainState.ETag))
                 {
-                    response = await ExecuteWithRetries(() => this._dbClient.CreateDocumentAsync(
-                       UriFactory.CreateDocumentCollectionUri(this._options.DB, this._options.Collection),
+                    response = await ExecuteWithRetries(() => this._container.CreateItemAsync(
                        entity,
-                       new RequestOptions { PartitionKey = new PartitionKey(partitionKey) },
-                       true)).ConfigureAwait(false);
+                       new PartitionKey(partitionKey))).ConfigureAwait(false);
 
                     grainState.ETag = response.Resource.ETag;
                 }
                 else
                 {
-                    var requestOptions = new RequestOptions
-                    {
-                        PartitionKey = new PartitionKey(partitionKey),
-                        AccessCondition = new AccessCondition { Condition = grainState.ETag, Type = AccessConditionType.IfMatch }
-                    };
-
                     response = await ExecuteWithRetries(() =>
-                        this._dbClient.ReplaceDocumentAsync(
-                            UriFactory.CreateDocumentUri(this._options.DB, this._options.Collection, entity.Id),
-                            entity, requestOptions)).ConfigureAwait(false);
+                        this._container.ReplaceItemAsync(
+                            entity, entity.Id,
+                            new PartitionKey(partitionKey),
+                            new ItemRequestOptions { IfMatchEtag = grainState.ETag }))
+                        .ConfigureAwait(false);
                     grainState.ETag = response.Resource.ETag;
                 }
 
             }
-            catch (DocumentClientException dce) when (dce.StatusCode == HttpStatusCode.PreconditionFailed)
+            catch (CosmosException dce) when (dce.StatusCode == HttpStatusCode.PreconditionFailed)
             {
                 throw new CosmosConditionNotSatisfiedException(grainType, grainReference, this._options.Collection, "Unknown", grainState.ETag, dce);
             }
@@ -249,20 +238,16 @@ namespace Orleans.Persistence.CosmosDB
 
         public async Task ClearStateAsync(string grainType, GrainReference grainReference, IGrainState grainState)
         {
-            if (this._dbClient == null) throw new ArgumentException("GrainState collection not initialized.");
+            if (this._cosmos == null) throw new ArgumentException("GrainState collection not initialized.");
 
-            string id = GetKeyString(grainReference);
-            string partitionKey = await BuildPartitionKey(grainType, grainReference);
+            string id = this.GetKeyString(grainReference);
+            string partitionKey = await this.BuildPartitionKey(grainType, grainReference);
             if (this._logger.IsEnabled(LogLevel.Trace)) this._logger.Trace(
                 "Clearing: GrainType={0} Key={1} Grainid={2} ETag={3} DeleteStateOnClear={4} from Collection={4} with PartitionKey {5}",
                 grainType, id, grainReference, grainState.ETag, this._options.DeleteStateOnClear, this._options.Collection, partitionKey);
 
-            var requestOptions = new RequestOptions
-            {
-                PartitionKey = new PartitionKey(partitionKey),
-                AccessCondition = new AccessCondition { Condition = grainState.ETag, Type = AccessConditionType.IfMatch }
-            };
-
+            var pk = new PartitionKey(partitionKey);
+            var requestOptions = new ItemRequestOptions { IfMatchEtag = grainState.ETag };
             try
             {
                 if (this._options.DeleteStateOnClear)
@@ -270,9 +255,8 @@ namespace Orleans.Persistence.CosmosDB
                     if (string.IsNullOrWhiteSpace(grainState.ETag))
                         return;  //state not written
 
-                    await ExecuteWithRetries(() => this._dbClient.DeleteDocumentAsync(
-                        UriFactory.CreateDocumentUri(this._options.DB, this._options.Collection, id),
-                        requestOptions));
+                    await ExecuteWithRetries(() => this._container.DeleteItemAsync<GrainStateEntity>(
+                        id, pk, requestOptions));
                 }
                 else
                 {
@@ -286,14 +270,11 @@ namespace Orleans.Persistence.CosmosDB
                     };
 
                     var response = await ExecuteWithRetries(() =>
-                        string.IsNullOrWhiteSpace(grainState.ETag)
-                        ? this._dbClient.CreateDocumentAsync(
-                            UriFactory.CreateDocumentCollectionUri(this._options.DB, this._options.Collection),
-                            entity,
-                            new RequestOptions { PartitionKey = new PartitionKey(partitionKey) })
-                        : this._dbClient.ReplaceDocumentAsync(
-                            UriFactory.CreateDocumentUri(this._options.DB, this._options.Collection, entity.Id),
-                            entity, requestOptions)).ConfigureAwait(false);
+                        string.IsNullOrWhiteSpace(grainState.ETag) ?
+                            this._container.CreateItemAsync(entity, pk) :
+                            this._container.ReplaceItemAsync(entity, entity.Id, pk, requestOptions))
+                        .ConfigureAwait(false);
+
                     grainState.ETag = response.Resource.ETag;
                 }
             }
@@ -307,7 +288,7 @@ namespace Orleans.Persistence.CosmosDB
         // This method is invoked via "dynamic" by Orleans.Indexing. A future interface may be designed for this.
         public async Task<List<GrainReference>> LookupAsync<K>(string grainType, string indexedField, K key)
         {
-            if (this._dbClient == null) throw new ArgumentException("GrainState collection not initialized.");
+            if (this._cosmos == null) throw new ArgumentException("GrainState collection not initialized.");
 
             //indexing is not supported if cosmosDb is configured with custom partition key builders. For this to be
             //supported the index should be updated from DirectStorageManagedIndexImpl class rather than implicit through
@@ -328,21 +309,17 @@ namespace Orleans.Persistence.CosmosDB
                 var response = await ExecuteWithRetries(async () =>
                 {
                     var pk = new PartitionKey(grainType);
-                    var sqlParams = new SqlParameterCollection();
-                    sqlParams.Add(new SqlParameter("@key", key));
-                    var sqlSpec = new SqlQuerySpec($"SELECT * FROM c WHERE c.State.{indexedField} = @key", sqlParams);
-
-                    var query = this._dbClient.CreateDocumentQuery<GrainStateEntity>(
-                        UriFactory.CreateDocumentCollectionUri(this._options.DB, this._options.Collection),
-                        sqlSpec,
-                        new FeedOptions { PartitionKey = pk }
-                    ).AsDocumentQuery();
+                    
+                    var query = this._container.GetItemQueryIterator<GrainStateEntity>(
+                        new QueryDefinition($"SELECT * FROM c WHERE c.State.{indexedField} = @key").WithParameter("@key", key),
+                        requestOptions: new QueryRequestOptions { PartitionKey = pk }
+                    );
 
                     var reminders = new List<GrainStateEntity>();
 
                     do
                     {
-                        var queryResponse = await query.ExecuteNextAsync<GrainStateEntity>().ConfigureAwait(false);
+                        var queryResponse = await query.ReadNextAsync().ConfigureAwait(false);
                         if (queryResponse != null && queryResponse.Count > 0)
                         {
                             reminders.AddRange(queryResponse.ToArray());
@@ -367,7 +344,7 @@ namespace Orleans.Persistence.CosmosDB
 
         public Task Close(CancellationToken ct)
         {
-            this._dbClient.Dispose();
+            this._cosmos.Dispose();
             return Task.CompletedTask;
         }
         private static async Task<TResult> ExecuteWithRetries<TResult>(Func<Task<TResult>> clientFunc)
@@ -380,13 +357,13 @@ namespace Orleans.Persistence.CosmosDB
                 {
                     return await clientFunc();
                 }
-                catch (DocumentClientException dce) when (dce.StatusCode == TooManyRequests)
+                catch (CosmosException dce) when (dce.StatusCode == TooManyRequests)
                 {
-                    sleepTime = dce.RetryAfter;
+                    sleepTime = dce.RetryAfter ?? TimeSpan.Zero;
                 }
-                catch (AggregateException ae) when ((ae.InnerException is DocumentClientException dce) && dce.StatusCode == TooManyRequests)
+                catch (AggregateException ae) when ((ae.InnerException is CosmosException dce) && dce.StatusCode == TooManyRequests)
                 {
-                    sleepTime = dce.RetryAfter;
+                    sleepTime = dce.RetryAfter ?? TimeSpan.Zero;
                 }
                 await Task.Delay(sleepTime);
             }
@@ -421,21 +398,15 @@ namespace Orleans.Persistence.CosmosDB
 
         private async Task TryCreateCosmosDBResources()
         {
-            RequestOptions databaseOptions = new RequestOptions
-            {
-                OfferThroughput =
+            var offerThroughput =
                     this._options.DatabaseThroughput >= 400
                     ? (int?)this._options.DatabaseThroughput
-                    : null
-            };
-            var dbResponse = await this._dbClient.CreateDatabaseIfNotExistsAsync(new Database { Id = this._options.DB }, databaseOptions);
+                    : null;
 
-            var stateCollection = new DocumentCollection
-            {
-                Id = this._options.Collection
-            };
-            stateCollection.PartitionKey.Paths.Add(DEFAULT_PARTITION_KEY_PATH);
+            var dbResponse = await this._cosmos.CreateDatabaseIfNotExistsAsync(this._options.DB, offerThroughput);
+            var db = dbResponse.Database;
 
+            var stateCollection = new ContainerProperties(this._options.Collection, DEFAULT_PARTITION_KEY_PATH);
             stateCollection.IndexingPolicy.IndexingMode = IndexingMode.Consistent;
             stateCollection.IndexingPolicy.IncludedPaths.Add(new IncludedPath { Path = "/*" });
             stateCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/\"State\"/*" });
@@ -452,23 +423,13 @@ namespace Orleans.Persistence.CosmosDB
             const int maxRetries = 3;
             for (var retry = 0; retry <= maxRetries; ++retry)
             {
-                var collResponse = await this._dbClient.CreateDocumentCollectionIfNotExistsAsync(
-                    UriFactory.CreateDatabaseUri(this._options.DB),
-                    stateCollection,
-                    new RequestOptions
-                    {
-                        PartitionKey = new PartitionKey(DEFAULT_PARTITION_KEY_PATH),
-                        ConsistencyLevel = this._options.GetConsistencyLevel(),
-                        OfferThroughput =
-                            this._options.CollectionThroughput >= 400
-                            ? (int?)this._options.CollectionThroughput
-                            : null
-                    });
+                var collResponse = await db.CreateContainerIfNotExistsAsync(
+                    stateCollection, offerThroughput);
 
                 if (collResponse.StatusCode == HttpStatusCode.OK || collResponse.StatusCode == HttpStatusCode.Created)
                 {
-                    var documentCollection = (DocumentCollection)collResponse;
-                    this._partitionKeyPath = documentCollection.PartitionKey.Paths.First();
+                    var documentCollection = collResponse.Resource;
+                    this._partitionKeyPath = documentCollection.PartitionKeyPath;
                     if (this._partitionKeyPath == GRAINTYPE_PARTITION_KEY_PATH &&
                         !(this._partitionKeyProvider is DefaultPartitionKeyProvider))
                         throw new BadGrainStorageConfigException("Custom partition key provider is not compatible with partition key path set to /GrainType");
@@ -486,11 +447,11 @@ namespace Orleans.Persistence.CosmosDB
         {
             try
             {
-                var dbUri = UriFactory.CreateDatabaseUri(this._options.DB);
-                await this._dbClient.ReadDatabaseAsync(dbUri);
-                await this._dbClient.DeleteDatabaseAsync(dbUri);
+                var db = this._cosmos.GetDatabase(this._options.DB);
+                await db.ReadAsync();
+                await db.DeleteAsync();
             }
-            catch (DocumentClientException dce) when (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
+            catch (CosmosException dce) when (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
                 return;
             }
