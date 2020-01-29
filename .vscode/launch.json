@@ -10,7 +10,7 @@
             "request": "launch",
             "preLaunchTask": "build",
             // If you have changed target frameworks, make sure to update the program path.
-            "program": "${workspaceFolder}/test/Orleans.CosmosDB.Tests/bin/Debug/netcoreapp3.0/Orleans.CosmosDB.Tests.dll",
+            "program": "${workspaceFolder}/test/Orleans.CosmosDB.Tests/bin/Debug/netcoreapp3.1/Orleans.CosmosDB.Tests.dll",
             "args": [],
             "cwd": "${workspaceFolder}/test/Orleans.CosmosDB.Tests",
             // For more information about the 'console' field, see https://aka.ms/VSCode-CS-LaunchJson-Console

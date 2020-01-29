@@ -1,6 +1,3 @@
-using Microsoft.Azure.Documents;
-using Microsoft.Azure.Documents.Client;
-using Microsoft.Azure.Documents.Linq;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orleans.Configuration;
@@ -13,13 +10,14 @@ using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 using System.Text;
+using Microsoft.Azure.Cosmos;
+using Microsoft.Azure.Cosmos.Linq;
 
 namespace Orleans.Reminders.CosmosDB
 {
     internal class CosmosDBReminderTable : IReminderTable
     {
         private const string READ_ROWS_QUERY = "SELECT * FROM c WHERE c.ServiceId = @serviceId";
-        private const string READ_ROW_BY_ID_QUERY = "SELECT * FROM c WHERE c.id = @id";
         private const string READ_ROWS_BEGIN_LESS_THAN_END = " AND c.GrainHash > @begin AND c.GrainHash <= @end";
         private const string READ_ROWS_BEGIN_GREATER_THAN_END = " AND ((c.GrainHash > @begin) OR (c.GrainHash <= @end))";
         private const string PARTITION_KEY_PATH = "/PartitionKey";
@@ -29,21 +27,22 @@ namespace Orleans.Reminders.CosmosDB
         private readonly CosmosDBReminderStorageOptions _options;
         private readonly string _serviceId;
 
-        private DocumentClient _dbClient;
+        private CosmosClient _cosmos;
+        private Container _container;
 
         private const HttpStatusCode TooManyRequests = (HttpStatusCode)429;
 
         public CosmosDBReminderTable(
             IGrainReferenceConverter grainReferenceConverter,
             ILoggerFactory loggerFactory,
-            IOptions<ClusterOptions> _clusterOptions,
+            IOptions<ClusterOptions> clusterOptions,
             IOptions<CosmosDBReminderStorageOptions> options)
         {
             this._loggerFactory = loggerFactory;
             this._logger = loggerFactory.CreateLogger(nameof(CosmosDBReminderTable));
             this._options = options.Value;
             this._grainReferenceConverter = grainReferenceConverter;
-            this._serviceId = string.IsNullOrWhiteSpace(_clusterOptions.Value.ServiceId) ? Guid.Empty.ToString() : _clusterOptions.Value.ServiceId;
+            this._serviceId = string.IsNullOrWhiteSpace(clusterOptions.Value.ServiceId) ? Guid.Empty.ToString() : clusterOptions.Value.ServiceId;
         }
 
         public async Task Init()
@@ -59,28 +58,27 @@ namespace Orleans.Reminders.CosmosDB
 
                 if (this._options.Client != null)
                 {
-                    this._dbClient = this._options.Client;
+                    this._cosmos = this._options.Client;
                 }
                 else
                 {
-                    this._dbClient = new DocumentClient(new Uri(this._options.AccountEndpoint), this._options.AccountKey,
-                    new ConnectionPolicy
+                    this._cosmos = new CosmosClient(this._options.AccountEndpoint, this._options.AccountKey,
+                    new CosmosClientOptions
                     {
-                        ConnectionMode = this._options.ConnectionMode,
-                        ConnectionProtocol = this._options.ConnectionProtocol
+                        ConnectionMode = this._options.ConnectionMode
                     });
                 }
 
-                await this._dbClient.OpenAsync();
+                this._container = this._cosmos.GetContainer(this._options.DB, this._options.Collection);
 
                 if (this._options.CanCreateResources)
                 {
                     if (this._options.DropDatabaseOnInit)
                     {
-                        await TryDeleteDatabase();
+                        await this.TryDeleteDatabase();
                     }
 
-                    await TryCreateCosmosDBResources();
+                    await this.TryCreateCosmosDBResources();
                 }
 
                 stopWatch.Stop();
@@ -102,17 +100,19 @@ namespace Orleans.Reminders.CosmosDB
                 var response = await ExecuteWithRetries(async () =>
                 {
                     var pk = new PartitionKey(ReminderEntity.ConstructPartitionKey(this._serviceId, grainRef));
-                    var sqlParams = new SqlParameterCollection();
-                    sqlParams.Add(new SqlParameter("@id", ReminderEntity.ConstructId(grainRef, reminderName)));
-                    var sqlSpec = new SqlQuerySpec(READ_ROW_BY_ID_QUERY, sqlParams);
 
-                    var query = this._dbClient.CreateDocumentQuery<ReminderEntity>(
-                        UriFactory.CreateDocumentCollectionUri(this._options.DB, this._options.Collection),
-                        sqlSpec,
-                        new FeedOptions { PartitionKey = pk }
-                    ).AsDocumentQuery();
+                    ItemResponse<ReminderEntity> response = null;
+                    try
+                    {
+                        response = await this._container.ReadItemAsync<ReminderEntity>(
+                            ReminderEntity.ConstructId(grainRef, reminderName), pk);
+                    }
+                    catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.NotFound)
+                    {
+                        return null;
+                    }
 
-                    return (await query.ExecuteNextAsync<ReminderEntity>()).FirstOrDefault();
+                    return response.Resource;
                 }).ConfigureAwait(false);
 
                 return response != null ? this.FromEntity(response) : null;
@@ -132,19 +132,15 @@ namespace Orleans.Reminders.CosmosDB
                 {
                     var pk = new PartitionKey(ReminderEntity.ConstructPartitionKey(this._serviceId, grainRef));
 
-                    var query = this._dbClient.CreateDocumentQuery<ReminderEntity>(
-                        UriFactory.CreateDocumentCollectionUri(this._options.DB, this._options.Collection),
-                        new FeedOptions
-                        {
-                            PartitionKey = new PartitionKey(ReminderEntity.ConstructPartitionKey(this._serviceId, grainRef))
-                        }
-                    ).AsDocumentQuery();
+                    var query = this._container.GetItemLinqQueryable<ReminderEntity>(
+                        requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(ReminderEntity.ConstructPartitionKey(this._serviceId, grainRef)) }
+                    ).ToFeedIterator();
 
                     var reminders = new List<ReminderEntity>();
                     string continuation = string.Empty;
                     do
                     {
-                        var queryResponse = await query.ExecuteNextAsync<ReminderEntity>();
+                        var queryResponse = await query.ReadNextAsync();
                         if (queryResponse != null && queryResponse.Count > 0)
                         {
                             reminders.AddRange(queryResponse.ToArray());
@@ -173,12 +169,7 @@ namespace Orleans.Reminders.CosmosDB
             {
                 var response = await ExecuteWithRetries(async () =>
                 {
-                    var sqlParams = new SqlParameterCollection();
-
                     var sql = new StringBuilder(READ_ROWS_QUERY);
-                    sqlParams.Add(new SqlParameter("@serviceId", this._serviceId));
-                    sqlParams.Add(new SqlParameter("@begin", begin));
-                    sqlParams.Add(new SqlParameter("@end", end));
 
                     if (begin < end)
                     {
@@ -189,21 +180,20 @@ namespace Orleans.Reminders.CosmosDB
                         sql.Append(READ_ROWS_BEGIN_GREATER_THAN_END);
                     }
 
-                    var sqlSpec = new SqlQuerySpec(sql.ToString(), sqlParams);
+                    var sqlSpec = new QueryDefinition(sql.ToString())
+                        .WithParameter("@serviceId", this._serviceId)
+                        .WithParameter("@begin", begin)
+                        .WithParameter("@end", end);
 
-                    var query = this._dbClient.CreateDocumentQuery<ReminderEntity>(
-                        UriFactory.CreateDocumentCollectionUri(this._options.DB, this._options.Collection),
-                        sqlSpec,
-                        // Unless we find something else, we need this to make this range query
-                        new FeedOptions { EnableCrossPartitionQuery = true }
+                    var query = this._container.GetItemQueryIterator<ReminderEntity>(
+                        sqlSpec
                     );
 
-                    var docQuery = query.AsDocumentQuery();
                     var reminders = new List<ReminderEntity>();
 
                     do
                     {
-                        var queryResponse = await docQuery.ExecuteNextAsync<ReminderEntity>().ConfigureAwait(false);
+                        var queryResponse = await query.ReadNextAsync().ConfigureAwait(false);
                         if (queryResponse != null && queryResponse.Count > 0)
                         {
                             reminders.AddRange(queryResponse.ToArray());
@@ -212,7 +202,7 @@ namespace Orleans.Reminders.CosmosDB
                         {
                             break;
                         }
-                    } while (docQuery.HasMoreResults);
+                    } while (query.HasMoreResults);
 
                     return reminders;
                 }).ConfigureAwait(false);
@@ -232,18 +222,18 @@ namespace Orleans.Reminders.CosmosDB
             {
                 var response = await ExecuteWithRetries(() =>
                 {
-                    var ac = new AccessCondition { Condition = eTag, Type = AccessConditionType.IfMatch };
                     var pk = new PartitionKey(ReminderEntity.ConstructPartitionKey(this._serviceId, grainRef));
 
-                    return this._dbClient.DeleteDocumentAsync(
-                        UriFactory.CreateDocumentUri(this._options.DB, this._options.Collection, ReminderEntity.ConstructId(grainRef, reminderName)),
-                        new RequestOptions { AccessCondition = ac, PartitionKey = pk }
+                    return this._container.DeleteItemAsync<ReminderEntity>(
+                        ReminderEntity.ConstructId(grainRef, reminderName),
+                        pk,
+                        new ItemRequestOptions { IfMatchEtag = eTag }
                     );
                 }).ConfigureAwait(false);
 
                 return true;
             }
-            catch (DocumentClientException dce) when (dce.StatusCode == HttpStatusCode.PreconditionFailed)
+            catch (CosmosException dce) when (dce.StatusCode == HttpStatusCode.PreconditionFailed)
             {
                 return false;
             }
@@ -260,15 +250,12 @@ namespace Orleans.Reminders.CosmosDB
             {
                 var entities = await ExecuteWithRetries(async () =>
                 {
-                    var query = this._dbClient.CreateDocumentQuery<ReminderEntity>(
-                        UriFactory.CreateDocumentCollectionUri(this._options.DB, this._options.Collection),
-                        new FeedOptions { EnableCrossPartitionQuery = true }
-                    ).AsDocumentQuery();
+                    var query = this._container.GetItemLinqQueryable<ReminderEntity>().ToFeedIterator();
 
                     var reminders = new List<ReminderEntity>();
                     do
                     {
-                        var queryResponse = await query.ExecuteNextAsync<ReminderEntity>().ConfigureAwait(false);
+                        var queryResponse = await query.ReadNextAsync().ConfigureAwait(false);
                         if (queryResponse != null && queryResponse.Count > 0)
                         {
                             reminders.AddRange(queryResponse);
@@ -287,10 +274,7 @@ namespace Orleans.Reminders.CosmosDB
                 {
                     deleteTasks.Add(ExecuteWithRetries(() =>
                     {
-                        return this._dbClient.DeleteDocumentAsync(
-                            UriFactory.CreateDocumentUri(this._options.DB, this._options.Collection, entity.Id),
-                            new RequestOptions { PartitionKey = new PartitionKey(entity.PartitionKey) }
-                        );
+                        return this._container.DeleteItemAsync<ReminderEntity>(entity.Id, new PartitionKey(entity.PartitionKey));
                     }));
                 }
                 await Task.WhenAll(deleteTasks).ConfigureAwait(false);
@@ -306,17 +290,16 @@ namespace Orleans.Reminders.CosmosDB
         {
             try
             {
-                ReminderEntity entity = ToEntity(entry);
+                ReminderEntity entity = this.ToEntity(entry);
 
                 var response = await ExecuteWithRetries(() =>
                 {
-                    var ac = new AccessCondition { Condition = entry.ETag, Type = AccessConditionType.IfMatch };
                     var pk = new PartitionKey(ReminderEntity.ConstructPartitionKey(this._serviceId, entry.GrainRef));
 
-                    return this._dbClient.UpsertDocumentAsync(
-                        UriFactory.CreateDocumentCollectionUri(this._options.DB, this._options.Collection),
+                    return this._container.UpsertItemAsync(
                         entity,
-                        new RequestOptions { AccessCondition = ac, PartitionKey = pk }
+                        pk,
+                        new ItemRequestOptions { IfMatchEtag = entry.ETag }
                     );
                 }).ConfigureAwait(false);
 
@@ -354,13 +337,13 @@ namespace Orleans.Reminders.CosmosDB
                 {
                     return await clientFunc();
                 }
-                catch (DocumentClientException dce) when (dce.StatusCode == TooManyRequests)
+                catch (CosmosException dce) when (dce.StatusCode == TooManyRequests)
                 {
-                    sleepTime = dce.RetryAfter;
+                    sleepTime = dce.RetryAfter ?? dce.RetryAfter.Value;
                 }
-                catch (AggregateException ae) when ((ae.InnerException is DocumentClientException dce) && dce.StatusCode == TooManyRequests)
+                catch (AggregateException ae) when ((ae.InnerException is CosmosException dce) && dce.StatusCode == TooManyRequests)
                 {
-                    sleepTime = dce.RetryAfter;
+                    sleepTime = dce.RetryAfter ?? dce.RetryAfter.Value;
                 }
                 await Task.Delay(sleepTime);
             }
@@ -382,11 +365,9 @@ namespace Orleans.Reminders.CosmosDB
         {
             try
             {
-                var dbUri = UriFactory.CreateDatabaseUri(this._options.DB);
-                await this._dbClient.ReadDatabaseAsync(dbUri);
-                await this._dbClient.DeleteDatabaseAsync(dbUri);
+                await this._cosmos.GetDatabase(this._options.DB).DeleteAsync();
             }
-            catch (DocumentClientException dce) when (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
+            catch (CosmosException dce) when (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
                 return;
             }
@@ -394,35 +375,28 @@ namespace Orleans.Reminders.CosmosDB
 
         private async Task TryCreateCosmosDBResources()
         {
-            var dbResponse = await this._dbClient.CreateDatabaseIfNotExistsAsync(new Database { Id = this._options.DB });
+            var offerThroughput =
+                    this._options.CollectionThroughput >= 400
+                    ? (int?)this._options.CollectionThroughput
+                    : null;
 
-            var remindersCollection = new DocumentCollection
-            {
-                Id = this._options.Collection
-            };
+            var dbResponse = await this._cosmos.CreateDatabaseIfNotExistsAsync(this._options.DB, offerThroughput);
+            var db = dbResponse.Database;
 
-            remindersCollection.PartitionKey.Paths.Add(PARTITION_KEY_PATH);
+            var remindersCollection = new ContainerProperties(this._options.Collection, PARTITION_KEY_PATH);
 
             remindersCollection.IndexingPolicy.IndexingMode = IndexingMode.Consistent;
             remindersCollection.IndexingPolicy.IncludedPaths.Add(new IncludedPath { Path = "/*" });
             remindersCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/StartAt/*" });
             remindersCollection.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/Period/*" });
+            remindersCollection.IndexingPolicy.IndexingMode = IndexingMode.Consistent;
 
             const int maxRetries = 3;
             for (var retry = 0; retry <= maxRetries; ++retry)
             {
-                var collResponse = await this._dbClient.CreateDocumentCollectionIfNotExistsAsync(
-                UriFactory.CreateDatabaseUri(this._options.DB),
-                remindersCollection,
-                new RequestOptions
-                {
-                    PartitionKey = new PartitionKey(PARTITION_KEY_PATH),
-                    ConsistencyLevel = this._options.GetConsistencyLevel(),
-                    OfferThroughput =
-                            this._options.CollectionThroughput >= 400
-                            ? (int?)this._options.CollectionThroughput
-                            : null
-                });
+                var collResponse = await db.CreateContainerIfNotExistsAsync(
+                   remindersCollection, offerThroughput);
+
                 if (retry == maxRetries || dbResponse.StatusCode != HttpStatusCode.Created || collResponse.StatusCode == HttpStatusCode.Created)
                 {
                     break;  // Apparently some throttling logic returns HttpStatusCode.OK (not 429) when the collection wasn't created in a new DB.

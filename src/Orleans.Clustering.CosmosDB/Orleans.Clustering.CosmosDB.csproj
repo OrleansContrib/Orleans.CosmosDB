@@ -23,47 +23,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Remove="Sprocs\DeleteAllEntries.js" />
-    <None Remove="Sprocs\GetAliveGateways.js" />
-    <None Remove="Sprocs\InsertSiloEntity.js" />
-    <None Remove="Sprocs\ReadAll.js" />
-    <None Remove="Sprocs\ReadSiloEntity.js" />
-    <None Remove="Sprocs\UpdateIAmAlive.js" />
-    <None Remove="Sprocs\UpdateSiloEntity.js" />
-  </ItemGroup>
-
-  <ItemGroup>
     <Compile Include="..\AssemblyInfo.cs" Link="AssemblyInfo.cs" />
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Sprocs\DeleteAllEntries.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Sprocs\GetAliveGateways.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Sprocs\InsertSiloEntity.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Sprocs\ReadAll.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Sprocs\ReadSiloEntity.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Sprocs\UpdateIAmAlive.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Sprocs\UpdateSiloEntity.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </EmbeddedResource>
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Azure.DocumentDB.Core" Version="2.9.0" />
-    <PackageReference Include="Microsoft.Orleans.Core" Version="3.0.0" />
-    <PackageReference Include="Microsoft.Orleans.OrleansRuntime" Version="3.0.0" />
+    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.6.0" />
+    <PackageReference Include="Microsoft.Orleans.OrleansRuntime" Version="3.0.2" />
   </ItemGroup>
 
 </Project>

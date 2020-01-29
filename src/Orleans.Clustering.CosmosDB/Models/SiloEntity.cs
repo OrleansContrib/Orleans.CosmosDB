@@ -1,8 +1,10 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Linq;
 using Orleans.Runtime;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Orleans.Clustering.CosmosDB.Models
 {
@@ -43,5 +45,28 @@ namespace Orleans.Clustering.CosmosDB.Models
 
         [JsonProperty(nameof(IAmAliveTime))]
         public DateTimeOffset IAmAliveTime { get; set; }
+
+        public static SiloEntity FromDocument(dynamic document)
+        {
+            var suspectingSilos = document.SuspectingSilos != null ? ((JArray)document.SuspectingSilos).Select(t => t.ToString()).ToList() : null;
+            var suspectingTimes = document.SuspectingTimes != null ? ((JArray)document.SuspectingTimes).Select(t => t.ToString()).ToList() : null;
+            return new SiloEntity
+            {
+                Id = document.id,
+                ETag = document._etag,
+                ClusterId = document.ClusterId,
+                Address = document.Address,
+                Generation = (int)document.Generation,
+                Hostname = document.Hostname,
+                IAmAliveTime = (DateTimeOffset)document.IAmAliveTime,
+                Port = (int)document.Port,
+                ProxyPort = document.ProxyPort ?? null,
+                SiloName = document.SiloName,
+                StartTime = (DateTimeOffset)document.StartTime,
+                Status = (SiloStatus)document.Status,
+                SuspectingSilos = suspectingSilos,
+                SuspectingTimes = suspectingTimes
+            };
+        }
     }
 }

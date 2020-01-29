@@ -8,5 +8,16 @@ namespace Orleans.Clustering.CosmosDB.Models
 
         [JsonProperty]
         public int ClusterVersion { get; set; } = 0;
+
+        public static ClusterVersionEntity FromDocument(dynamic document)
+        {
+            return new ClusterVersionEntity
+            {
+                Id = document.id,
+                ETag = document._etag,
+                ClusterId = document.ClusterId,
+                ClusterVersion = document.ClusterVersion
+            };
+        }
     }
 }
