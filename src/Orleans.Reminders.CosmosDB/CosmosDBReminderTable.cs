@@ -18,7 +18,6 @@ namespace Orleans.Reminders.CosmosDB
     internal class CosmosDBReminderTable : IReminderTable
     {
         private const string READ_ROWS_QUERY = "SELECT * FROM c WHERE c.ServiceId = @serviceId";
-        private const string READ_ROW_BY_ID_QUERY = "SELECT * FROM c WHERE c.id = @id";
         private const string READ_ROWS_BEGIN_LESS_THAN_END = " AND c.GrainHash > @begin AND c.GrainHash <= @end";
         private const string READ_ROWS_BEGIN_GREATER_THAN_END = " AND ((c.GrainHash > @begin) OR (c.GrainHash <= @end))";
         private const string PARTITION_KEY_PATH = "/PartitionKey";
