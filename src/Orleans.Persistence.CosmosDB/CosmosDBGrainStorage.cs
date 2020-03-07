@@ -257,6 +257,8 @@ namespace Orleans.Persistence.CosmosDB
 
                     await ExecuteWithRetries(() => this._container.DeleteItemAsync<GrainStateEntity>(
                         id, pk, requestOptions));
+
+                    grainState.ETag = null;
                 }
                 else
                 {
