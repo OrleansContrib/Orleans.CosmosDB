@@ -281,7 +281,7 @@ namespace Orleans.Hosting
             Action<OptionsBuilder<CosmosDBStorageOptions>> configureOptions = null)
         {
             configureOptions?.Invoke(services.AddOptions<CosmosDBStorageOptions>(name));
-            services.AddTransient<IConfigurationValidator>(sp => new CosmosDBStorageOptionsValidator(sp.GetService<IOptionsSnapshot<CosmosDBStorageOptions>>().Get(name), name));
+            services.AddTransient<IConfigurationValidator>(sp => new CosmosDBStorageOptionsValidator(sp.GetService<IOptionsMonitor<CosmosDBStorageOptions>>().Get(name), name));
             services.ConfigureNamedOptionForLogging<CosmosDBStorageOptions>(name);
             services.TryAddSingleton(sp => sp.GetServiceByName<IGrainStorage>(ProviderConstants.DEFAULT_STORAGE_PROVIDER_NAME));
             services.TryAddSingleton<IPartitionKeyProvider, DefaultPartitionKeyProvider>();
