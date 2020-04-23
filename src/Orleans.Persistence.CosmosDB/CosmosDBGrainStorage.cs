@@ -464,7 +464,7 @@ namespace Orleans.Persistence.CosmosDB
     {
         public static IGrainStorage Create(IServiceProvider services, string name)
         {
-            var options = services.GetRequiredService<IOptionsMonitor<CosmosDBGrainStorage>>().Get(name);
+            var options = services.GetRequiredService<IOptionsMonitor<CosmosDBStorageOptions>>().Get(name);
             return ActivatorUtilities.CreateInstance<CosmosDBGrainStorage>(services, options, name);
         }
     }
