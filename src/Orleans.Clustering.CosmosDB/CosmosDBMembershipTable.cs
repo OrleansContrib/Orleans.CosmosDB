@@ -228,11 +228,22 @@ namespace Orleans.Clustering.CosmosDB
 
         }
 
-        public Task UpdateIAmAlive(MembershipEntry entry)
+        public async Task UpdateIAmAlive(MembershipEntry entry)
         {
-            var siloEntity = ConvertToEntity(entry, this._clusterOptions.ClusterId);
+            var siloEntityId = ConstructSiloEntityId(entry.SiloAddress);
+            var response = await this._container.ReadItemAsync<SiloEntity>(siloEntityId, new PartitionKey(this._clusterOptions.ClusterId));
 
-            return this._container.ReplaceItemAsync(siloEntity, siloEntity.Id, new PartitionKey(this._clusterOptions.ClusterId));
+            if (response.StatusCode != HttpStatusCode.OK)
+            {
+                var message = $"Unable to query for SiloEntity {entry.ToFullString()}";
+                this._logger.Warn(ErrorCode.MembershipBase, message);
+                throw new OrleansException(message);
+            }
+
+            var siloEntity = response.Resource;
+            siloEntity.IAmAliveTime = entry.IAmAliveTime;
+
+            await this._container.ReplaceItemAsync(siloEntity, siloEntityId, new PartitionKey(this._clusterOptions.ClusterId));
         }
 
         public async Task<bool> UpdateRow(MembershipEntry entry, string etag, TableVersion tableVersion)
