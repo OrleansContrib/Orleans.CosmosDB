@@ -24,7 +24,7 @@ namespace Orleans.CosmosDB.Tests
     }
 
     [Collection("Default")]
-    public abstract class MembershipTableTestsBase : IDisposable //, IClassFixture<ConnectionStringFixture>
+    public abstract class MembershipTableTestsBase : IDisposable
     {
         private static readonly string hostName = Dns.GetHostName();
         private readonly ILogger logger = null;
@@ -32,7 +32,6 @@ namespace Orleans.CosmosDB.Tests
         private readonly IGatewayListProvider gatewayListProvider;
         protected readonly string clusterId;
         protected ILoggerFactory loggerFactory;
-        protected const string testDatabaseName = "OrleansMembershipTest";//for relational storage
 
         private static string accountEndpoint;
         private static string accountKey;
@@ -42,10 +41,8 @@ namespace Orleans.CosmosDB.Tests
             OrleansFixture.GetAccountInfo(out accountEndpoint, out accountKey);
         }
 
-        protected MembershipTableTestsBase(/*ConnectionStringFixture fixture, TestEnvironmentFixture environment, */LoggerFilterOptions filters)
+        protected MembershipTableTestsBase()
         {
-            //this.environment = environment;
-            //loggerFactory = TestingUtils.CreateDefaultLoggerFactory($"{this.GetType()}.log", filters);
             var sp = new ServiceCollection().AddLogging(b => b.AddConsole()).BuildServiceProvider();
             loggerFactory = sp.GetRequiredService<ILoggerFactory>();
             logger = loggerFactory.CreateLogger(this.GetType().FullName);
@@ -54,10 +51,6 @@ namespace Orleans.CosmosDB.Tests
 
             logger?.Info("ClusterId={0}", this.clusterId);
 
-            //fixture.InitializeConnectionStringAccessor(GetConnectionString);
-            //this.connectionString = fixture.ConnectionString;
-            var adoVariant = GetAdoInvariant();
-
             membershipTable = CreateMembershipTable(logger, accountEndpoint, accountKey);
             membershipTable.InitializeMembershipTable(true).WithTimeout(TimeSpan.FromMinutes(3)).Wait();
 
@@ -65,29 +58,16 @@ namespace Orleans.CosmosDB.Tests
             gatewayListProvider.InitializeGatewayListProvider().WithTimeout(TimeSpan.FromMinutes(3)).Wait();
         }
 
-        //public IGrainFactory GrainFactory => this.environment.GrainFactory;
-
-        //public IGrainReferenceConverter GrainReferenceConverter => this.environment.Services.GetRequiredService<IGrainReferenceConverter>();
-
-        //public IServiceProvider Services => this.environment.Services;
-
         public void Dispose()
         {
             if (membershipTable != null && SiloInstanceTableTestConstants.DeleteEntriesAfterTest)
             {
                 membershipTable.DeleteMembershipTableEntries(this.clusterId).Wait();
             }
-            //this.loggerFactory.Dispose();
         }
 
         protected abstract IGatewayListProvider CreateGatewayListProvider(ILogger logger, string accountEndpoint, string accountKey);
         protected abstract IMembershipTable CreateMembershipTable(ILogger logger, string accountEndpoint, string accountKey);
-        protected abstract Task<string> GetConnectionString();
-
-        protected virtual string GetAdoInvariant()
-        {
-            return null;
-        }
 
         protected async Task MembershipTable_GetGateways()
         {

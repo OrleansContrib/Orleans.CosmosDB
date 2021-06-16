@@ -188,9 +188,7 @@ namespace Orleans.CosmosDB.Tests
 
             var list = await grain.Read();
 
-
             Assert.Empty(list);
-
         }
 
         [Fact]
@@ -220,9 +218,6 @@ namespace Orleans.CosmosDB.Tests
 
             var grain = this._fixture.Client.GetGrain<ITestCustomPartitionGrain>(guid);
             await grain.ClearState();
-
-
         }
     }
-
 }

@@ -16,21 +16,8 @@ namespace Orleans.CosmosDB.Tests
     /// <summary>
     /// Tests for operation of Orleans Membership Table using Azure Cosmos DB
     /// </summary>
-    public class MBTTests : MembershipTableTestsBase/*, IClassFixture<AzureStorageBasicTests>*/
+    public class MBTTests : MembershipTableTestsBase
     {
-        public MBTTests() : base(CreateFilters())
-        {
-        }
-
-        private static LoggerFilterOptions CreateFilters()
-        {
-            var filters = new LoggerFilterOptions();
-            //filters.AddFilter(typeof(Orleans.Clustering.CosmosDB.AzureTableDataManager<>).FullName, LogLevel.Trace);
-            //filters.AddFilter(typeof(OrleansSiloInstanceManager).FullName, LogLevel.Trace);
-            //filters.AddFilter("Orleans.Storage", LogLevel.Trace);
-            return filters;
-        }
-
         protected override IMembershipTable CreateMembershipTable(ILogger logger, string accountEndpoint, string accountKey)
         {
             var httpHandler = new HttpClientHandler()
@@ -44,7 +31,6 @@ namespace Orleans.CosmosDB.Tests
                 new CosmosClientOptions { ConnectionMode = ConnectionMode.Gateway }
             );
 
-            //TestUtils.CheckForAzureStorage();
             var options = new CosmosDBClusteringOptions()
             {
                 Client = dbClient,
@@ -78,12 +64,6 @@ namespace Orleans.CosmosDB.Tests
                 Options.Create(options),
                 Options.Create(new ClusterOptions { ClusterId = this.clusterId }),
                 Options.Create(new GatewayOptions()));
-        }
-
-        protected override Task<string> GetConnectionString()
-        {
-            //TestUtils.CheckForAzureStorage();
-            return Task.FromResult("");
         }
 
         [Fact]
