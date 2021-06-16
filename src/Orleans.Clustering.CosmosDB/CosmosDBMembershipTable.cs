@@ -26,6 +26,7 @@ namespace Orleans.Clustering.CosmosDB
 
         private CosmosClient _cosmos;
         private Container _container;
+        private ItemResponse<SiloEntity> _selfRow;
 
         public CosmosDBMembershipTable(ILoggerFactory loggerFactory, IOptions<ClusterOptions> clusterOptions, IOptions<CosmosDBClusteringOptions> clusteringOptions)
         {
@@ -231,19 +232,38 @@ namespace Orleans.Clustering.CosmosDB
         public async Task UpdateIAmAlive(MembershipEntry entry)
         {
             var siloEntityId = ConstructSiloEntityId(entry.SiloAddress);
-            var response = await this._container.ReadItemAsync<SiloEntity>(siloEntityId, new PartitionKey(this._clusterOptions.ClusterId));
 
-            if (response.StatusCode != HttpStatusCode.OK)
+            if (this._selfRow is not { } selfRow)
             {
-                var message = $"Unable to query for SiloEntity {entry.ToFullString()}";
-                this._logger.Warn(ErrorCode.MembershipBase, message);
-                throw new OrleansException(message);
+                var response = await this._container.ReadItemAsync<SiloEntity>(siloEntityId, new PartitionKey(this._clusterOptions.ClusterId));
+
+                if (response.StatusCode != HttpStatusCode.OK)
+                {
+                    var message = $"Unable to query for SiloEntity {entry.ToFullString()}";
+                    this._logger.LogWarning((int)ErrorCode.MembershipBase, message);
+                    throw new OrleansException(message);
+                }
+
+                this._selfRow = selfRow = response;
             }
 
-            var siloEntity = response.Resource;
+            var siloEntity = selfRow.Resource;
             siloEntity.IAmAliveTime = entry.IAmAliveTime;
 
-            await this._container.ReplaceItemAsync(siloEntity, siloEntityId, new PartitionKey(this._clusterOptions.ClusterId));
+            try
+            {
+                var replaceResponse = await this._container.ReplaceItemAsync(
+                    siloEntity,
+                    siloEntityId,
+                    new PartitionKey(this._clusterOptions.ClusterId),
+                    new ItemRequestOptions { IfMatchEtag = selfRow.ETag });
+                this._selfRow = replaceResponse;
+            }
+            catch
+            {
+                this._selfRow = null;
+                throw;
+            }
         }
 
         public async Task<bool> UpdateRow(MembershipEntry entry, string etag, TableVersion tableVersion)

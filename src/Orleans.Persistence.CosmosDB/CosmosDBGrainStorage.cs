@@ -153,10 +153,12 @@ namespace Orleans.Persistence.CosmosDB
                 if (doc.Resource.State != null)
                 {
                     grainState.State = JsonConvert.DeserializeObject(doc.Resource.State.ToString(), grainState.State.GetType(), this._options.JsonSerializerSettings);
+                    grainState.RecordExists = true;
                 }
                 else
                 {
                     grainState.State = Activator.CreateInstance(grainState.State.GetType());
+                    grainState.RecordExists = true;
                 }
                 
                 grainState.ETag = doc.Resource.ETag;
@@ -224,6 +226,7 @@ namespace Orleans.Persistence.CosmosDB
                     grainState.ETag = response.Resource.ETag;
                 }
 
+                grainState.RecordExists = true;
             }
             catch (CosmosException dce) when (dce.StatusCode == HttpStatusCode.PreconditionFailed)
             {
@@ -259,6 +262,7 @@ namespace Orleans.Persistence.CosmosDB
                         id, pk, requestOptions));
 
                     grainState.ETag = null;
+                    grainState.RecordExists = false;
                 }
                 else
                 {
@@ -278,6 +282,7 @@ namespace Orleans.Persistence.CosmosDB
                         .ConfigureAwait(false);
 
                     grainState.ETag = response.Resource.ETag;
+                    grainState.RecordExists = true;
                 }
             }
             catch (Exception exc)
