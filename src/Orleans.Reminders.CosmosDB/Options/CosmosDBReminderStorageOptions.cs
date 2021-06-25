@@ -9,6 +9,8 @@ namespace Orleans.Reminders.CosmosDB
         private const string ORLEANS_DB = "Orleans";
         private const string ORLEANS_REMINDERS_COLLECTION = "OrleansReminders";
         private const int ORLEANS_STORAGE_COLLECTION_THROUGHPUT = 400;
+
+        public CosmosClient ProvisionClient { get; set; }
         public CosmosClient Client { get; set; }
         public string AccountEndpoint { get; set; }
         [Redact]

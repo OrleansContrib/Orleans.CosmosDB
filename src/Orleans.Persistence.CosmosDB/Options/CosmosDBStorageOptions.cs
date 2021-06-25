@@ -12,6 +12,7 @@ namespace Orleans.Persistence.CosmosDB
         internal const string ORLEANS_STORAGE_COLLECTION = "OrleansStorage";
         private const int ORLEANS_STORAGE_COLLECTION_THROUGHPUT = 400;
 
+        public CosmosClient ProvisionClient { get; set; }
         public CosmosClient Client { get; set; }
 
         [Redact]

@@ -33,6 +33,7 @@ namespace Orleans.CosmosDB.Tests
 
             var options = new CosmosDBClusteringOptions()
             {
+                ProvisionClient = dbClient,
                 Client = dbClient,
                 CanCreateResources = true,
                 DropDatabaseOnInit = true,
