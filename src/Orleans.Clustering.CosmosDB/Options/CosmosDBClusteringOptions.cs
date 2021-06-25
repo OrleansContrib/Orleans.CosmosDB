@@ -10,6 +10,7 @@ namespace Orleans.Clustering.CosmosDB
         private const string ORLEANS_CLUSTER_COLLECTION = "OrleansCluster";
         private const int ORLEANS_CLUSTER_COLLECTION_THROUGHPUT = 400;
 
+        public CosmosClient ProvisionClient { get; set; }
         public CosmosClient Client { get; set; }
         public string AccountEndpoint { get; set; }
         [Redact]

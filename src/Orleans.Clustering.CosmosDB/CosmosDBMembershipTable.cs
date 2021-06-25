@@ -24,6 +24,7 @@ namespace Orleans.Clustering.CosmosDB
         private readonly CosmosDBClusteringOptions _options;
         private readonly ClusterOptions _clusterOptions;
 
+        private CosmosClient _provisionClient;
         private CosmosClient _cosmos;
         private Container _container;
         private ItemResponse<SiloEntity> _selfRow;
@@ -50,6 +51,14 @@ namespace Orleans.Clustering.CosmosDB
                         ConnectionMode = this._options.ConnectionMode
                     }
                 );
+            }
+            if (this._options.ProvisionClient != null)
+            {
+                this._provisionClient = this._options.ProvisionClient;
+            }
+            else
+            {
+                this._provisionClient = this._cosmos;
             }
             this._container = this._cosmos.GetDatabase(this._options.DB).GetContainer(this._options.Collection);
 
@@ -378,7 +387,7 @@ namespace Orleans.Clustering.CosmosDB
         {
             try
             {
-                await this._cosmos.GetDatabase(this._options.DB).DeleteAsync();
+                await this._provisionClient.GetDatabase(this._options.DB).DeleteAsync();
             }
             catch (CosmosException dce) when (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
@@ -388,7 +397,7 @@ namespace Orleans.Clustering.CosmosDB
 
         private async Task TryCreateCosmosDBResources()
         {
-            var dbResponse = (await this._cosmos.CreateDatabaseIfNotExistsAsync(this._options.DB)).Database;
+            var dbResponse = (await this._provisionClient.CreateDatabaseIfNotExistsAsync(this._options.DB)).Database;
 
             var containerProperties = new ContainerProperties(this._options.Collection, PARTITION_KEY);
             containerProperties.IndexingPolicy.IndexingMode = IndexingMode.Consistent;

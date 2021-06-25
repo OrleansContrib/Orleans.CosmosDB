@@ -27,6 +27,7 @@ namespace Orleans.Reminders.CosmosDB
         private readonly CosmosDBReminderStorageOptions _options;
         private readonly string _serviceId;
 
+        private CosmosClient _provisionClient;
         private CosmosClient _cosmos;
         private Container _container;
 
@@ -67,6 +68,14 @@ namespace Orleans.Reminders.CosmosDB
                     {
                         ConnectionMode = this._options.ConnectionMode
                     });
+                }
+                if (this._options.ProvisionClient != null)
+                {
+                    this._provisionClient = this._options.ProvisionClient;
+                }
+                else
+                {
+                    this._provisionClient = this._cosmos;
                 }
 
                 this._container = this._cosmos.GetContainer(this._options.DB, this._options.Collection);
@@ -365,7 +374,7 @@ namespace Orleans.Reminders.CosmosDB
         {
             try
             {
-                await this._cosmos.GetDatabase(this._options.DB).DeleteAsync();
+                await this._provisionClient.GetDatabase(this._options.DB).DeleteAsync();
             }
             catch (CosmosException dce) when (dce.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
@@ -380,7 +389,7 @@ namespace Orleans.Reminders.CosmosDB
                     ? (int?)this._options.CollectionThroughput
                     : null;
 
-            var dbResponse = await this._cosmos.CreateDatabaseIfNotExistsAsync(this._options.DB, offerThroughput);
+            var dbResponse = await this._provisionClient.CreateDatabaseIfNotExistsAsync(this._options.DB, offerThroughput);
             var db = dbResponse.Database;
 
             var remindersCollection = new ContainerProperties(this._options.Collection, PARTITION_KEY_PATH);
