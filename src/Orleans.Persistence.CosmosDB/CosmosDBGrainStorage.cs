@@ -405,10 +405,20 @@ namespace Orleans.Persistence.CosmosDB
 
         private async Task TryCreateCosmosDBResources()
         {
-            var offerThroughput =
-                    this._options.DatabaseThroughput >= 400
-                    ? (int?)this._options.DatabaseThroughput
-                    : null;
+            DatabaseResponse dbResponse;
+
+            if (this._options.DatabaseUseSharedThroughput)
+            {
+                var throughputProperties = this._options.DatabaseUseAutoscaleThroughput
+                    ? ThroughputProperties.CreateAutoscaleThroughput(this._options.DatabaseAutoscaleThroughputMax)
+                    : ThroughputProperties.CreateManualThroughput(this._options.DatabaseThroughput);
+                
+                dbResponse = await this._cosmos.CreateDatabaseIfNotExistsAsync(this._options.DB, throughputProperties);
+            }
+            else
+            {
+                dbResponse = await this._cosmos.CreateDatabaseIfNotExistsAsync(this._options.DB);
+            }
 
             var dbResponse = await this._cosmos.CreateDatabaseIfNotExistsAsync(this._options.DB, offerThroughput);
             var db = dbResponse.Database;
@@ -430,8 +440,20 @@ namespace Orleans.Persistence.CosmosDB
             const int maxRetries = 3;
             for (var retry = 0; retry <= maxRetries; ++retry)
             {
-                var collResponse = await db.CreateContainerIfNotExistsAsync(
-                    stateCollection, offerThroughput);
+                ContainerResponse collResponse;
+
+                if (this._options.UseDedicatedThroughput)
+                {
+                    var throughputProperties = this._options.UseAutoscaleThroughput
+                        ? ThroughputProperties.CreateAutoscaleThroughput(this._options.AutoscaleThroughputMax)
+                        : ThroughputProperties.CreateManualThroughput(this._options.CollectionThroughput);
+                    
+                    dbResponse = await db.CreateContainerIfNotExistsAsync(stateCollection, throughputProperties);
+                }
+                else
+                {
+                    dbResponse = await db.CreateContainerIfNotExistsAsync(stateCollection);
+                }
 
                 if (collResponse.StatusCode == HttpStatusCode.OK || collResponse.StatusCode == HttpStatusCode.Created)
                 {

@@ -409,8 +409,18 @@ namespace Orleans.Clustering.CosmosDB
             //}
             containerProperties.IndexingPolicy.IndexingMode = IndexingMode.Consistent;
 
-            await dbResponse.CreateContainerIfNotExistsAsync(
-                containerProperties, this._options.CollectionThroughput);
+            if (this._options.UseDedicatedThroughput)
+            {
+                ThroughputProperties throughputProperties = this._options.UseAutoscaleThroughput
+                    ? ThroughputProperties.CreateAutoscaleThroughput(this._options.AutoscaleThroughputMax)
+                    : ThroughputProperties.CreateManualThroughput(this._options.CollectionThroughput);
+                
+                await dbResponse.CreateContainerIfNotExistsAsync(containerProperties, throughputProperties);
+            }
+            else
+            {
+                await dbResponse.CreateContainerIfNotExistsAsync(containerProperties);
+            }
         }
 
         public async Task CleanupDefunctSiloEntries(DateTimeOffset beforeDate)
