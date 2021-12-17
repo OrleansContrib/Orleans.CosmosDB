@@ -158,7 +158,7 @@ namespace Orleans.Persistence.CosmosDB
                 else
                 {
                     grainState.State = Activator.CreateInstance(grainState.State.GetType());
-                    grainState.RecordExists = true;
+                    grainState.RecordExists = false;
                 }
                 
                 grainState.ETag = doc.Resource.ETag;
@@ -169,6 +169,7 @@ namespace Orleans.Persistence.CosmosDB
                 {
                     // State is new, just activate a default and return
                     grainState.State = Activator.CreateInstance(grainState.State.GetType());
+                    grainState.RecordExists = false;
                     return;
                 }
 
