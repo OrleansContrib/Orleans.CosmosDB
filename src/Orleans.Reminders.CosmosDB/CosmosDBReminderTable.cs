@@ -375,12 +375,21 @@ namespace Orleans.Reminders.CosmosDB
 
         private async Task TryCreateCosmosDBResources()
         {
-            var offerThroughput =
-                    this._options.CollectionThroughput >= 400
-                    ? (int?)this._options.CollectionThroughput
-                    : null;
+            DatabaseResponse dbResponse;
 
-            var dbResponse = await this._cosmos.CreateDatabaseIfNotExistsAsync(this._options.DB, offerThroughput);
+            if (this._options.DatabaseUseSharedThroughput)
+            {
+                var throughputProperties = this._options.DatabaseUseAutoscaleThroughput
+                ? ThroughputProperties.CreateAutoscaleThroughput(this._options.DatabaseAutoscaleThroughputMax)
+                : ThroughputProperties.CreateManualThroughput(this._options.DatabaseThroughput);
+
+                dbResponse = await this._cosmos.CreateDatabaseIfNotExistsAsync(this._options.DB, throughputProperties);
+            }
+            else
+            {
+                dbResponse = await this._cosmos.CreateDatabaseIfNotExistsAsync(this._options.DB);
+            }
+
             var db = dbResponse.Database;
 
             var remindersCollection = new ContainerProperties(this._options.Collection, PARTITION_KEY_PATH);
@@ -394,8 +403,20 @@ namespace Orleans.Reminders.CosmosDB
             const int maxRetries = 3;
             for (var retry = 0; retry <= maxRetries; ++retry)
             {
-                var collResponse = await db.CreateContainerIfNotExistsAsync(
-                   remindersCollection, offerThroughput);
+                ContainerResponse collResponse;
+
+                if (this._options.UseDedicatedThroughput)
+                {
+                    var throughputProperties = this._options.UseAutoscaleThroughput
+                    ? ThroughputProperties.CreateAutoscaleThroughput(this._options.AutoscaleThroughputMax)
+                    : ThroughputProperties.CreateManualThroughput(this._options.CollectionThroughput);
+                    
+                    collResponse = await db.CreateContainerIfNotExistsAsync(remindersCollection, throughputProperties);
+                }
+                else
+                {
+                    collResponse = await db.CreateContainerIfNotExistsAsync(remindersCollection);
+                }
 
                 if (retry == maxRetries || dbResponse.StatusCode != HttpStatusCode.Created || collResponse.StatusCode == HttpStatusCode.Created)
                 {
