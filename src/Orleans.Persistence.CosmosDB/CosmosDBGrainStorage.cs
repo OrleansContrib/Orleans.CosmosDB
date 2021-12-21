@@ -40,6 +40,7 @@ namespace Orleans.Persistence.CosmosDB
         private readonly ITypeResolver _typeResolver;
         private readonly CosmosDBStorageOptions _options;
         private readonly IPartitionKeyProvider _partitionKeyProvider;
+        private CosmosClient _provisionClient;
         internal CosmosClient _cosmos;  // internal for test
         internal Container _container;
 
@@ -109,6 +110,14 @@ namespace Orleans.Persistence.CosmosDB
                         this._options.AccountKey,
                         new CosmosClientOptions { ConnectionMode = this._options.ConnectionMode }
                     );
+                }
+                if (this._options.ProvisionClient != null)
+                {
+                    this._provisionClient = this._options.ProvisionClient;
+                }
+                else
+                {
+                    this._provisionClient = this._cosmos;
                 }
                 this._container = this._cosmos.GetDatabase(this._options.DB).GetContainer(this._options.Collection);
 
@@ -352,6 +361,7 @@ namespace Orleans.Persistence.CosmosDB
 
         public Task Close(CancellationToken ct)
         {
+            this._provisionClient.Dispose();
             this._cosmos.Dispose();
             return Task.CompletedTask;
         }
@@ -411,7 +421,7 @@ namespace Orleans.Persistence.CosmosDB
                     ? (int?)this._options.DatabaseThroughput
                     : null;
 
-            var dbResponse = await this._cosmos.CreateDatabaseIfNotExistsAsync(this._options.DB, offerThroughput);
+            var dbResponse = await this._provisionClient.CreateDatabaseIfNotExistsAsync(this._options.DB, offerThroughput);
             var db = dbResponse.Database;
 
             var stateCollection = new ContainerProperties(this._options.Collection, DEFAULT_PARTITION_KEY_PATH);
@@ -455,7 +465,7 @@ namespace Orleans.Persistence.CosmosDB
         {
             try
             {
-                var db = this._cosmos.GetDatabase(this._options.DB);
+                var db = this._provisionClient.GetDatabase(this._options.DB);
                 await db.ReadAsync();
                 await db.DeleteAsync();
             }

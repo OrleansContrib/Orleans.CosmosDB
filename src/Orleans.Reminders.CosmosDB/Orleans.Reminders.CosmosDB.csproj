@@ -27,7 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.17.1" />
+    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.19.0" />
     <PackageReference Include="Microsoft.Orleans.OrleansRuntime" Version="3.4.2" />
   </ItemGroup>
 

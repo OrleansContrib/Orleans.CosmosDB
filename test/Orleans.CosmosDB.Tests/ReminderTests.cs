@@ -34,6 +34,7 @@ namespace Orleans.CosmosDB.Tests
                     .AddMemoryGrainStorage(OrleansFixture.TEST_STORAGE)
                     .UseCosmosDBReminderService(opt =>
                     {
+                        opt.ProvisionClient = dbClient;
                         opt.Client = dbClient;
                         opt.CanCreateResources = true;
                         opt.DB = DatabaseName;

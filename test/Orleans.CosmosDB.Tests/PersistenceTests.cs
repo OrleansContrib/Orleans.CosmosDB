@@ -56,6 +56,7 @@ namespace Orleans.CosmosDB.Tests
                 return builder
                     .AddCosmosDBGrainStorage<PrimaryKeyPartitionKeyProvider>(OrleansFixture.TEST_STORAGE, opt =>
                     {
+                        opt.ProvisionClient = dbClient;
                         opt.Client = dbClient;
                         opt.DropDatabaseOnInit = true;
                         opt.CanCreateResources = true;
