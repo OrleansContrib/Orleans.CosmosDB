@@ -13,7 +13,7 @@ namespace Orleans.Persistence.CosmosDB
         private const bool ORLEANS_STORAGE_DEDICATED_THROUGHPUT_ENABLED = true;
         private const bool ORLEANS_STORAGE_SHARED_THROUGHPUT_ENABLED = true;
         private const int ORLEANS_STORAGE_COLLECTION_THROUGHPUT = 400;
-        private const bool ORLEANS_STORAGE_AUTOSCALE_THROUGHPUT_ENABLED = 400;
+        private const bool ORLEANS_STORAGE_AUTOSCALE_THROUGHPUT_ENABLED = false;
         private const int ORLEANS_STORAGE_AUTOSCALE_THROUGHPUT_MAX = 4000;
 
         public CosmosClient Client { get; set; }

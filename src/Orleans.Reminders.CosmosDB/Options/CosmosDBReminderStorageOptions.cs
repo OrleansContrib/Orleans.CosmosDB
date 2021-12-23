@@ -19,8 +19,8 @@ namespace Orleans.Reminders.CosmosDB
         public string AccountKey { get; set; }
         public string DB { get; set; } = ORLEANS_DB;
         public int DatabaseThroughput { get; set; } = ORLEANS_STORAGE_COLLECTION_THROUGHPUT;
-        public int DatabaseUseSharedThroughput { get; set; } = ORLEANS_STORAGE_SHARED_THROUGHPUT_ENABLED;
-        public int DatabaseUseAutoscaleThroughput { get; set; } = ORLEANS_STORAGE_AUTOSCALE_THROUGHPUT_ENABLED;
+        public bool DatabaseUseSharedThroughput { get; set; } = ORLEANS_STORAGE_SHARED_THROUGHPUT_ENABLED;
+        public bool DatabaseUseAutoscaleThroughput { get; set; } = ORLEANS_STORAGE_AUTOSCALE_THROUGHPUT_ENABLED;
         public int DatabaseAutoscaleThroughputMax { get; set; } = ORLEANS_STORAGE_AUTOSCALE_THROUGHPUT_MAX;
         public string Collection { get; set; } = ORLEANS_REMINDERS_COLLECTION;
         public int CollectionThroughput { get; set; } = ORLEANS_STORAGE_COLLECTION_THROUGHPUT;
