@@ -420,7 +420,6 @@ namespace Orleans.Persistence.CosmosDB
                 dbResponse = await this._cosmos.CreateDatabaseIfNotExistsAsync(this._options.DB);
             }
 
-            var dbResponse = await this._cosmos.CreateDatabaseIfNotExistsAsync(this._options.DB, offerThroughput);
             var db = dbResponse.Database;
 
             var stateCollection = new ContainerProperties(this._options.Collection, DEFAULT_PARTITION_KEY_PATH);
@@ -448,11 +447,11 @@ namespace Orleans.Persistence.CosmosDB
                         ? ThroughputProperties.CreateAutoscaleThroughput(this._options.AutoscaleThroughputMax)
                         : ThroughputProperties.CreateManualThroughput(this._options.CollectionThroughput);
                     
-                    dbResponse = await db.CreateContainerIfNotExistsAsync(stateCollection, throughputProperties);
+                    collResponse = await db.CreateContainerIfNotExistsAsync(stateCollection, throughputProperties);
                 }
                 else
                 {
-                    dbResponse = await db.CreateContainerIfNotExistsAsync(stateCollection);
+                    collResponse = await db.CreateContainerIfNotExistsAsync(stateCollection);
                 }
 
                 if (collResponse.StatusCode == HttpStatusCode.OK || collResponse.StatusCode == HttpStatusCode.Created)
