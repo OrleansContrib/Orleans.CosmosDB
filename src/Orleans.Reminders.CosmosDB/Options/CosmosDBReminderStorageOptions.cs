@@ -8,14 +8,25 @@ namespace Orleans.Reminders.CosmosDB
     {
         private const string ORLEANS_DB = "Orleans";
         private const string ORLEANS_REMINDERS_COLLECTION = "OrleansReminders";
+        private const bool ORLEANS_STORAGE_DEDICATED_THROUGHPUT_ENABLED = true;
+        private const bool ORLEANS_STORAGE_SHARED_THROUGHPUT_ENABLED = true;
         private const int ORLEANS_STORAGE_COLLECTION_THROUGHPUT = 400;
+        private const bool ORLEANS_STORAGE_AUTOSCALE_THROUGHPUT_ENABLED = false;
+        private const int ORLEANS_STORAGE_AUTOSCALE_THROUGHPUT_MAX = 4000;
         public CosmosClient Client { get; set; }
         public string AccountEndpoint { get; set; }
         [Redact]
         public string AccountKey { get; set; }
         public string DB { get; set; } = ORLEANS_DB;
+        public int DatabaseThroughput { get; set; } = ORLEANS_STORAGE_COLLECTION_THROUGHPUT;
+        public bool DatabaseUseSharedThroughput { get; set; } = ORLEANS_STORAGE_SHARED_THROUGHPUT_ENABLED;
+        public bool DatabaseUseAutoscaleThroughput { get; set; } = ORLEANS_STORAGE_AUTOSCALE_THROUGHPUT_ENABLED;
+        public int DatabaseAutoscaleThroughputMax { get; set; } = ORLEANS_STORAGE_AUTOSCALE_THROUGHPUT_MAX;
         public string Collection { get; set; } = ORLEANS_REMINDERS_COLLECTION;
         public int CollectionThroughput { get; set; } = ORLEANS_STORAGE_COLLECTION_THROUGHPUT;
+        public bool CollectionUseDedicatedThroughput { get; set; } = ORLEANS_STORAGE_DEDICATED_THROUGHPUT_ENABLED;
+        public bool CollectionUseAutoscaleThroughput { get; set; } = ORLEANS_STORAGE_AUTOSCALE_THROUGHPUT_ENABLED;
+        public int CollectionAutoscaleThroughputMax { get; set; } = ORLEANS_STORAGE_AUTOSCALE_THROUGHPUT_MAX;
         public bool CanCreateResources { get; set; }
 
         [JsonConverter(typeof(StringEnumConverter))]
