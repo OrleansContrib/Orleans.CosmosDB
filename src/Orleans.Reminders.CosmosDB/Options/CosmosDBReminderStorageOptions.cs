@@ -24,9 +24,9 @@ namespace Orleans.Reminders.CosmosDB
         public int DatabaseAutoscaleThroughputMax { get; set; } = ORLEANS_STORAGE_AUTOSCALE_THROUGHPUT_MAX;
         public string Collection { get; set; } = ORLEANS_REMINDERS_COLLECTION;
         public int CollectionThroughput { get; set; } = ORLEANS_STORAGE_COLLECTION_THROUGHPUT;
-        public bool UseDedicatedThroughput { get; set; } = ORLEANS_STORAGE_DEDICATED_THROUGHPUT_ENABLED;
-        public bool UseAutoscaleThroughput { get; set; } = ORLEANS_STORAGE_AUTOSCALE_THROUGHPUT_ENABLED;
-        public int AutoscaleThroughputMax { get; set; } = ORLEANS_STORAGE_AUTOSCALE_THROUGHPUT_MAX;
+        public bool CollectionUseDedicatedThroughput { get; set; } = ORLEANS_STORAGE_DEDICATED_THROUGHPUT_ENABLED;
+        public bool CollectionUseAutoscaleThroughput { get; set; } = ORLEANS_STORAGE_AUTOSCALE_THROUGHPUT_ENABLED;
+        public int CollectionAutoscaleThroughputMax { get; set; } = ORLEANS_STORAGE_AUTOSCALE_THROUGHPUT_MAX;
         public bool CanCreateResources { get; set; }
 
         [JsonConverter(typeof(StringEnumConverter))]

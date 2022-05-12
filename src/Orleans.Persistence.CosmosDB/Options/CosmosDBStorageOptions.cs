@@ -36,9 +36,9 @@ namespace Orleans.Persistence.CosmosDB
         /// RU units for collection, can be set to 0 if throughput is specified on database level. See https://docs.microsoft.com/en-us/azure/cosmos-db/set-throughput
         /// </summary>
         public int CollectionThroughput { get; set; } = ORLEANS_STORAGE_COLLECTION_THROUGHPUT;
-        public bool UseDedicatedThroughput { get; set; } = ORLEANS_STORAGE_DEDICATED_THROUGHPUT_ENABLED;
-        public bool UseAutoscaleThroughput { get; set; } = ORLEANS_STORAGE_AUTOSCALE_THROUGHPUT_ENABLED;
-        public int AutoscaleThroughputMax { get; set; } = ORLEANS_STORAGE_AUTOSCALE_THROUGHPUT_MAX;
+        public bool CollectionUseDedicatedThroughput { get; set; } = ORLEANS_STORAGE_DEDICATED_THROUGHPUT_ENABLED;
+        public bool CollectionUseAutoscaleThroughput { get; set; } = ORLEANS_STORAGE_AUTOSCALE_THROUGHPUT_ENABLED;
+        public int CollectionAutoscaleThroughputMax { get; set; } = ORLEANS_STORAGE_AUTOSCALE_THROUGHPUT_MAX;
 
         public bool CanCreateResources { get; set; }
         public bool DeleteStateOnClear { get; set; }
@@ -107,19 +107,23 @@ namespace Orleans.Persistence.CosmosDB
                 throw new OrleansConfigurationException(
                     $"Configuration for CosmosDBStorage {this.name} is invalid. {nameof(this.options.Collection)} is not valid.");
 
-            if (!this.options.UseDedicatedThroughput && !this.options.DatabaseUseSharedThroughput)
+            if (!this.options.CollectionUseDedicatedThroughput && !this.options.DatabaseUseSharedThroughput)
                 throw new OrleansConfigurationException(
-                    $"Configuration for CosmosDBStorage {this.name} is invalid. Either {nameof(this.options.UseDedicatedThroughput)} and/or {nameof(this.options.DatabaseUseSharedThroughput)} must be true");
-            
-            if (this.options.UseAutoscaleThroughput && this.options.AutoscaleThroughputMax < 4000)
+                    $"Configuration for CosmosDBStorage {this.name} is invalid. Either {nameof(this.options.CollectionUseDedicatedThroughput)} and/or {nameof(this.options.DatabaseUseSharedThroughput)} must be true");
+
+            if (this.options.CollectionUseAutoscaleThroughput && !this.options.CollectionUseDedicatedThroughput)
                 throw new OrleansConfigurationException(
-                    $"Configuration for CosmosDBStorage {this.name} is invalid. {nameof(this.options.AutoscaleThroughputMax)} must be 4000 or greater.");
+                    $"Configuration for CosmosDBStorage {this.name} is invalid. If {nameof(this.options.CollectionUseAutoscaleThroughput)} is true, {nameof(this.options.CollectionUseDedicatedThroughput)} must also be true.");
+
+            if (this.options.CollectionUseAutoscaleThroughput && this.options.CollectionAutoscaleThroughputMax < 4000)
+                throw new OrleansConfigurationException(
+                    $"Configuration for CosmosDBStorage {this.name} is invalid. {nameof(this.options.CollectionAutoscaleThroughputMax)} must be 4000 or greater.");
             
             if (this.options.DatabaseUseAutoscaleThroughput && this.options.DatabaseAutoscaleThroughputMax < 4000)
                 throw new OrleansConfigurationException(
                     $"Configuration for CosmosDBStorage {this.name} is invalid. {nameof(this.options.DatabaseAutoscaleThroughputMax)} must be 4000 or greater.");
 
-            if (!this.options.UseAutoscaleThroughput && this.options.CollectionThroughput < 400)
+            if (!this.options.CollectionUseAutoscaleThroughput && this.options.CollectionThroughput < 400)
                 throw new OrleansConfigurationException(
                     $"Configuration for CosmosDBStorage {this.name} is invalid. {nameof(this.options.CollectionThroughput)} must be 400 or greater.");
             

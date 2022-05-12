@@ -441,10 +441,10 @@ namespace Orleans.Persistence.CosmosDB
             {
                 ContainerResponse collResponse;
 
-                if (this._options.UseDedicatedThroughput)
+                if (this._options.CollectionUseDedicatedThroughput)
                 {
-                    var throughputProperties = this._options.UseAutoscaleThroughput
-                        ? ThroughputProperties.CreateAutoscaleThroughput(this._options.AutoscaleThroughputMax)
+                    var throughputProperties = this._options.CollectionUseAutoscaleThroughput
+                        ? ThroughputProperties.CreateAutoscaleThroughput(this._options.CollectionAutoscaleThroughputMax)
                         : ThroughputProperties.CreateManualThroughput(this._options.CollectionThroughput);
                     
                     collResponse = await db.CreateContainerIfNotExistsAsync(stateCollection, throughputProperties);
