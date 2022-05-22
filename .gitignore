@@ -9,6 +9,9 @@
 *.userosscache
 *.sln.docstates
 
+**/CosmosDBTestSecrets.json
+**/cosmosdbtestsecrets.json
+
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 

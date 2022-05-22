@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
+using Orleans.Clustering.CosmosDB.Extensions;
 
 namespace Orleans.Clustering.CosmosDB
 {
@@ -402,15 +403,12 @@ namespace Orleans.Clustering.CosmosDB
             containerProperties.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/\"SuspectingTimes\"/*" });
             containerProperties.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/StartTime/*" });
             containerProperties.IndexingPolicy.ExcludedPaths.Add(new ExcludedPath { Path = "/IAmAliveTime/*" });
-            //var consistency = this._options.GetConsistencyLevel();
-            //if (consistency.HasValue)
-            //{
-            //    containerProperties.IndexingPolicy.IndexingMode = consistency.Value;
-            //}
             containerProperties.IndexingPolicy.IndexingMode = IndexingMode.Consistent;
 
+
+
             await dbResponse.CreateContainerIfNotExistsAsync(
-                containerProperties, this._options.CollectionThroughput);
+                containerProperties, this._options.GetThroughputProperties());
         }
 
         public async Task CleanupDefunctSiloEntries(DateTimeOffset beforeDate)
