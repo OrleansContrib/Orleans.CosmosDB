@@ -1,0 +1,55 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: Setup .NET Core
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 5.0.301
+    - name: Pack
+      working-directory: src/Orleans.Clustering.CosmosDB
+      run: dotnet pack --configuration Release -p:Version=${GITHUB_REF##*/v}
+    - name: Pack
+      working-directory: src/Orleans.Persistence.CosmosDB
+      run: dotnet pack --configuration Release -p:Version=${GITHUB_REF##*/v}
+    - name: Pack
+      working-directory: src/Orleans.Reminders.CosmosDB
+      run: dotnet pack --configuration Release -p:Version=${GITHUB_REF##*/v}
+    - name: Pack
+      working-directory: src/Orleans.Streaming.CosmosDB
+      run: dotnet pack --configuration Release -p:Version=${GITHUB_REF##*/v}
+    - name: Push
+      working-directory: src/Orleans.Clustering.CosmosDB/bin/Release
+      run: |
+        dotnet nuget push Orleans.Clustering.CosmosDB.*.nupkg -k ${{ secrets.NUGET_KEY }} -s https://api.nuget.org/v3/index.json
+    - name: Push
+      working-directory: src/Orleans.Persistence.CosmosDB/bin/Release
+      run: |
+        dotnet nuget push Orleans.Persistence.CosmosDB.*.nupkg -k ${{ secrets.NUGET_KEY }} -s https://api.nuget.org/v3/index.json
+    - name: Push
+      working-directory: src/Orleans.Reminders.CosmosDB/bin/Release
+      run: |
+        dotnet nuget push Orleans.Reminders.CosmosDB.*.nupkg -k ${{ secrets.NUGET_KEY }} -s https://api.nuget.org/v3/index.json
+    - name: Push
+      working-directory: src/Orleans.Streaming.CosmosDB/bin/Release
+      run: |
+        dotnet nuget push Orleans.Streaming.CosmosDB.*.nupkg -k ${{ secrets.NUGET_KEY }} -s https://api.nuget.org/v3/index.json
+    - name: Create Release
+      uses: actions/create-release@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        draft: false
+        prerelease: false
