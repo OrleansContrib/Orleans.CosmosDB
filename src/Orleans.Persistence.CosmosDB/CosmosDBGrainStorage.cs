@@ -407,7 +407,12 @@ namespace Orleans.Persistence.CosmosDB
 
         private async Task TryCreateCosmosDBResources()
         {
-            var dbResponse = await this._cosmos.CreateDatabaseIfNotExistsAsync(this._options.DB);
+            var dbThroughput =
+                this._options.DatabaseThroughput >= 400
+                ? (int?)this._options.DatabaseThroughput
+                : null;
+
+            var dbResponse = await this._cosmos.CreateDatabaseIfNotExistsAsync(this._options.DB, dbThroughput);
             var db = dbResponse.Database;
 
             var stateCollection = new ContainerProperties(this._options.Collection, DEFAULT_PARTITION_KEY_PATH);
