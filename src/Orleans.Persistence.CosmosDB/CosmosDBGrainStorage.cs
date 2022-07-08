@@ -16,6 +16,7 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+using Orleans.Persistence.CosmosDB.Extensions;
 
 namespace Orleans.Persistence.CosmosDB
 {
@@ -160,7 +161,7 @@ namespace Orleans.Persistence.CosmosDB
                     grainState.State = Activator.CreateInstance(grainState.State.GetType());
                     grainState.RecordExists = false;
                 }
-                
+
                 grainState.ETag = doc.Resource.ETag;
             }
             catch (CosmosException dce)
@@ -317,7 +318,7 @@ namespace Orleans.Persistence.CosmosDB
                 var response = await ExecuteWithRetries(async () =>
                 {
                     var pk = new PartitionKey(grainType);
-                    
+
                     var query = this._container.GetItemQueryIterator<GrainStateEntity>(
                         new QueryDefinition($"SELECT * FROM c WHERE c.State.{indexedField} = @key").WithParameter("@key", key),
                         requestOptions: new QueryRequestOptions { PartitionKey = pk }
@@ -406,12 +407,12 @@ namespace Orleans.Persistence.CosmosDB
 
         private async Task TryCreateCosmosDBResources()
         {
-            var offerThroughput =
-                    this._options.DatabaseThroughput >= 400
-                    ? (int?)this._options.DatabaseThroughput
-                    : null;
+            var dbThroughput =
+                this._options.DatabaseThroughput >= 400
+                ? (int?)this._options.DatabaseThroughput
+                : null;
 
-            var dbResponse = await this._cosmos.CreateDatabaseIfNotExistsAsync(this._options.DB, offerThroughput);
+            var dbResponse = await this._cosmos.CreateDatabaseIfNotExistsAsync(this._options.DB, dbThroughput);
             var db = dbResponse.Database;
 
             var stateCollection = new ContainerProperties(this._options.Collection, DEFAULT_PARTITION_KEY_PATH);
@@ -432,7 +433,7 @@ namespace Orleans.Persistence.CosmosDB
             for (var retry = 0; retry <= maxRetries; ++retry)
             {
                 var collResponse = await db.CreateContainerIfNotExistsAsync(
-                    stateCollection, offerThroughput);
+                    stateCollection, this._options.GetThroughputProperties());
 
                 if (collResponse.StatusCode == HttpStatusCode.OK || collResponse.StatusCode == HttpStatusCode.Created)
                 {

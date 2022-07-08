@@ -3,6 +3,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Orleans.Runtime;
 using System.Collections.Generic;
+using Orleans.Persistence.CosmosDB.Models;
 
 namespace Orleans.Persistence.CosmosDB
 {
@@ -59,6 +60,12 @@ namespace Orleans.Persistence.CosmosDB
         /// Stage of silo lifecycle where storage should be initialized.  Storage must be initialized prior to use.
         /// </summary>
         public int InitStage { get; set; } = DEFAULT_INIT_STAGE;
+
+        /// <summary>
+        /// The throughput mode to use for the collection/container used for clustering.
+        /// </summary>
+        /// <remarks>If the throughput mode is set to Autoscale then the <see cref="CollectionThroughput"/> will need to be at least 4000 RUs.</remarks>
+        public ThroughputMode ThroughputMode { get; set; } = ThroughputMode.Manual;
 
         public const int DEFAULT_INIT_STAGE = ServiceLifecycleStage.ApplicationServices;
 

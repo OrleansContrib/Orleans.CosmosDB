@@ -22,7 +22,7 @@ namespace Orleans.CosmosDB.Tests
         // Use distinct silo ports for each test as they may run in parallel.
         private static int portUniquifier;
 
-        public OrleansFixture()
+        protected OrleansFixture()
         {
             string serviceId = Guid.NewGuid().ToString();   // This is required by some tests; Reminders will parse it as a GUID.
 
