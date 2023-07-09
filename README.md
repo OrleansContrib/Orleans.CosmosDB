@@ -1,3 +1,5 @@
+> Note: This project was merged to Orleans main codebase. Starting on Orleans v7.2.0, all the providers are published to NuGet along with the core Orleans packages. New issues and contributions should be directed to https://github.com/dotnet/orleans.
+
 <p align="center">
   <img src="https://github.com/dotnet/orleans/blob/gh-pages/assets/logo.png" alt="Orleans.CosmosDB" width="300px"> 
   <h1>Orleans CosmosDB Providers</h1>
